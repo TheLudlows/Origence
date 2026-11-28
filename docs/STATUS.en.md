@@ -38,11 +38,11 @@ A fresh database supports offline provisioning of single-key workspaces. The cre
 
 `origence serve --local` opens the AnySeek Catalog at `OC_DATA_DIR/anyseek` in the same process through the Rust SDK. The host handles startup recovery, verification of published collections, and graceful shutdown. The Windows development script uses this entry point and optionally starts the Node UI. The cloud image runs `origence serve` against standalone AnySeek. The deployment environment provides the address and credential. [Operations guide](OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval)
 
-`origence` exposes `serve` (with alias `api`) and `plugin-hook`. First startup registers a deployment administrator. The administrator creates workspaces in the console or through HTTP. `origence-deploy` manages the local API and console, and `origence-setup` connects an Agent with an existing workspace key. Each installer rolls back its own changes and preserves data. [Installation guide](INSTALLER.en.md)
+`origence` exposes `serve` (with alias `api`). First startup registers a deployment administrator. The administrator creates workspaces in the console or through HTTP. `origence-deploy` manages the local API and console, and `origence-setup` connects an Agent with an existing workspace key. Each installer rolls back its own changes and preserves data. [Installation guide](INSTALLER.en.md)
 
 ## Streamable HTTP MCP
 
-The Claude Code and Codex plugins use Origence's `/mcp` endpoint for retrieval and other explicit tool calls without a local Origence executable. The server checks the key and workspace permissions on every request and uses the key's default workspace when none is specified. The plugin's automatic Run hook still reports through a local command. See [client setup](CLIENTS.en.md#direct-http-mcp) and [verification](VALIDATION.en.md).
+The Claude Code and Codex plugins use Origence's `/mcp` endpoint for retrieval and other explicit tool calls without a local Origence executable. The server checks the key and workspace permissions on every request and uses the key's default workspace when none is specified. The two clients share a Node.js hook for automatic Run reporting and optional archiving. See [client setup](CLIENTS.en.md#direct-http-mcp) and [verification](VALIDATION.en.md).
 
 Workspace keys and membership-based workspace administrators can open **Agent connections** to see their workspace's in-flight MCP
 requests and activity from the last five minutes, grouped by credential with

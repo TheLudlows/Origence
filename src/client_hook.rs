@@ -1,13 +1,10 @@
 //! Client Run metadata capture and delivery.
 mod events;
-mod plugin;
 mod queue;
-mod turn_sync;
 
 use crate::{client::HostClient, error::AppError, run::RunInput};
 use anyhow::{Context, ensure};
 use events::HookInput;
-pub use plugin::{PluginHookReport, capture_plugin_event};
 use queue::{Queue, Record};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -68,7 +65,6 @@ pub struct Profile {
     project: PathBuf,
     server: reqwest::Url,
     logical_key: Uuid,
-    workspace: Option<Uuid>,
     key_env: String,
     queue: Queue,
 }
@@ -136,7 +132,6 @@ impl Profile {
             project,
             server,
             logical_key,
-            workspace: None,
             key_env,
             queue: Queue::new(parent.join(queue_name)),
         }))
@@ -165,11 +160,7 @@ impl Profile {
             }
         };
         let identity = digest(
-            if self.workspace.is_some() {
-                b"origence-plugin-hook-run-v1"
-            } else {
-                b"origence-client-hook-run-v1"
-            },
+            b"origence-client-hook-run-v1",
             [
                 client.namespace(),
                 self.project.as_os_str().as_encoded_bytes(),
@@ -177,9 +168,7 @@ impl Profile {
                 self.logical_key.as_bytes(),
                 session,
                 turn,
-            ]
-            .into_iter()
-            .chain(self.workspace.iter().map(|id| id.as_bytes().as_slice())),
+            ],
         );
         Some(client.run_input(derived_uuid(identity)))
     }
@@ -269,9 +258,7 @@ impl Profile {
                 self.logical_key.as_bytes(),
                 self.key_env.as_bytes(),
                 token.as_bytes(),
-            ]
-            .into_iter()
-            .chain(self.workspace.iter().map(|id| id.as_bytes().as_slice())),
+            ],
         ))
     }
 

@@ -29,7 +29,7 @@ fn command(dir: &std::path::Path) -> Command {
     c
 }
 #[test]
-fn cli_exposes_only_serve_and_plugin_hook() {
+fn cli_exposes_only_serve() {
     let binary = env!("CARGO_BIN_EXE_origence");
     let output = std::process::Command::new(binary)
         .arg("--help")
@@ -45,9 +45,10 @@ fn cli_exposes_only_serve_and_plugin_hook() {
         .take_while(|line| !line.is_empty())
         .map(|line| line.split_whitespace().next().unwrap())
         .collect();
-    assert_eq!(commands, ["serve", "plugin-hook", "help"]);
+    assert_eq!(commands, ["serve", "help"]);
     for args in [
         ["--offline", "serve"],
+        ["plugin-hook", "--help"],
         ["search", "example"],
         ["workspace-create", "example"],
     ] {

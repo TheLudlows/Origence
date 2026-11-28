@@ -39,12 +39,12 @@ SQLite 仍保存不可变经验候选，以及 Run 精确回放所需的普通�
 
 `origence serve --local` 通过 Rust SDK 在同一进程打开 AnySeek 本地 Catalog，目录为 `OC_DATA_DIR/anyseek`。启动恢复、已发布集合核验及正常关闭由同一宿主管理。Windows 开发脚本调用此入口，再按需启动 Node UI。云上镜像使用 `origence serve` 连接独立部署的 AnySeek，地址与凭据由部署环境提供。[运维说明](OPERATIONS.md#anyseek-全文与向量)
 
-`origence` 公开 `serve`（兼容别名 `api`）和 `plugin-hook`。首次启动登记部署管理员。管理员通过控制台或 HTTP 创建工作空间。`origence-deploy` 管理本地 API 和控制台，`origence-setup` 使用已有工作区 Key 接入 Agent。两者独立卸载并保留数据。[安装说明](INSTALLER.md)
+`origence` 公开 `serve`（兼容别名 `api`）。首次启动登记部署管理员。管理员通过控制台或 HTTP 创建工作空间。`origence-deploy` 管理本地 API 和控制台，`origence-setup` 使用已有工作区 Key 接入 Agent。两者独立卸载并保留数据。[安装说明](INSTALLER.md)
 
 ## Streamable HTTP MCP
 
 Claude Code 和 Codex 插件通过 Origence 服务端的 `/mcp` 检索和调用工具。检索无需安装本地 Origence。服务端按请求校验凭据和工作区权限，未指定工作区时使用凭据的默认工作区。
-插件自动 Run Hook 仍经本地命令上报。见[客户端接入](CLIENTS.md#直连-http-mcp)与[验证](VALIDATION.md)。
+两个插件共用 Node.js Hook，负责 Run 上报和可选归档。见[客户端接入](CLIENTS.md#直连-http-mcp)与[验证](VALIDATION.md)。
 
 工作空间 Key 和成员授权工作区的管理员可在控制台「Agent 连接」查看本空间正在处理的 MCP 请求和最近五分钟的活动，
 按凭据汇总并显示握手识别的客户端类型。观测限于当前服务进程。见 [Agent 连接接口](API.md#agent-连接)。

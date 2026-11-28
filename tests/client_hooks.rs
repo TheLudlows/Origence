@@ -17,6 +17,11 @@ use std::{
 };
 use uuid::Uuid;
 
+pub(super) const HOOK_ENTRY: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/plugins/origence/hooks/entry.mjs"
+);
+
 const TOKEN: &str = "fixture-only-project-writer-token";
 const OTHER_TOKEN: &str = "fixture-only-other-writer-token";
 
@@ -243,21 +248,17 @@ async fn installed_hook_pins_workspace_and_retries_without_exposing_event_payloa
     let fixture = HookFixture::new();
     let data = fixture.config.parent().unwrap();
     let run = |client, input: Value, key, workspace: Option<String>, enabled| {
-        let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
+        let mut command = tokio::process::Command::new("node");
         command
             .current_dir(&fixture.project)
             .env("OC_API_KEY", key)
             .env_remove("OC_WORKSPACE_ID")
+            .env("OC_SERVER_URL", &peer.base)
+            .env_remove("OC_TURN_SYNC_PROJECT")
             .env("OC_PLUGIN_RUN_HOOK", enabled)
             .env("PLUGIN_DATA", data)
             .env("CLAUDE_PLUGIN_DATA", data)
-            .args([
-                "--server-url",
-                &peer.base,
-                "plugin-hook",
-                "--client",
-                client,
-            ])
+            .args(["--disable-warning=ExperimentalWarning", HOOK_ENTRY, client])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());

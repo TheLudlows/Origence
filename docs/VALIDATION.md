@@ -7,6 +7,15 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 共享 Node.js Agent Hook
+
+基于 #187 的 `8b051a9`，Linux、Rust 1.98.0、Node.js 24.22.1。Codex 0.171.0 和 Claude Code 2.1.330 使用合成 HTTP 及模型响应。
+
+- `node --disable-warning=ExperimentalWarning --test tools/plugin-hook.test.mjs` 通过 3 项，覆盖进程锁互斥及异常退出后的恢复、事件适配和归档脱敏。
+- Rust 集成测试过滤 `local_app::cli_exposes_only_serve`、`client_hooks::` 与 `turn_sync::`，通过 1、6、1 项。验证 Rust 主程序入口、真实 Run 和归档接口、权限隔离和回执丢失重试。
+- `python3 tools/plugin_smoke.py --binary <origence> --claude <claude> --codex <codex> --bind 127.0.0.1:0` 和 `python3 tools/installer_smoke.py --binary <origence> --claude <claude> --codex <codex>` 通过。两端安装同一包并在客户端 PATH 无 Origence 二进制时上报。
+- 用旧 Rust Hook 生成失败待重试的 Run 和私有问答队列。退出旧进程后，Node.js 从原 v1 文件重试。两端均保持原作用域、事件 ID 和 JSON 内容。Windows 和真实模型未在本地运行。
+
 ## 2026-11-28 · 精简 CLI 与启动登记管理员
 
 基于 main `340aa50`。Linux、Rust 1.98.0、Node 24，全部使用合成数据和临时目录。

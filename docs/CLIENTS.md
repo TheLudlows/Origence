@@ -23,13 +23,13 @@ codex mcp add origence-http --url http://127.0.0.1:8080/mcp --bearer-token-env-v
 默认使用凭据的默认工作区。要选择其他已授权工作区，在 HTTP MCP 请求中配置 `X-Origence-Workspace`
 请求头。下文的插件使用启动环境中的 `OC_WORKSPACE_ID` 填充此请求头。
 
-检索和显式工具调用无需本机 `origence`。插件中的自动 Run Hook 需要本机二进制。[远程部署配置](OPERATIONS.md#远程-mcp)
+MCP 走 HTTP。插件中的自动 Run Hook 和会话归档使用客户端机器上的 Node.js 24。[远程部署配置](OPERATIONS.md#远程-mcp)
 
 ## 安装 `origence` 插件
 
 准备一台客户端可访问的 Origence HTTP 宿主和支持插件 Marketplace 的客户端。插件安装 HTTP MCP，并默认启用私有
 Run Hook。请工作区管理员签发个人 Key。只需检索时使用 `reader` 并可[直接注册端点](#直连-http-mcp)。
-使用自动 Run Hook 时准备 `writer` Key 和支持 `origence plugin-hook` 的本机可执行文件。管理员在控制台或通过管理 API 签发所需凭据。
+使用自动 Run Hook 时准备具有写权限的 Key，并确保启动客户端的终端可以运行 `node --version`（24 或以上）。管理员在控制台或通过管理 API 签发所需凭据。
 
 从设置了 `OC_API_KEY` 的终端启动客户端。默认宿主是 `http://127.0.0.1:8080`。
 远程宿主使用 HTTPS。PowerShell 示例：
@@ -38,13 +38,6 @@ Run Hook。请工作区管理员签发个人 Key。只需检索时使用 `reader
 $env:OC_SERVER_URL = 'http://127.0.0.1:8080'
 $secret = Read-Host 'OC_API_KEY' -AsSecureString
 $env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
-```
-
-启用自动 Run 上报时，在启动前将 `origence` 所在目录加入 `PATH`。Windows 示例支持目录中的空格：
-
-```powershell
-$origenceExe = (Get-Item -LiteralPath 'C:\Program Files\Origence\origence.exe').FullName
-$env:Path = (Split-Path -Parent $origenceExe) + [IO.Path]::PathSeparator + $env:Path
 ```
 
 ### Claude Code
@@ -93,7 +86,7 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 
 | 现象 | 检查方式 |
 | --- | --- |
-| Hook 找不到 `origence` | 在启动客户端的同一终端运行 `Get-Command origence -CommandType Application`（Windows）或 `command -v origence`。确认路径指向所选二进制。 |
+| Hook 找不到 Node.js | 在启动客户端的同一终端运行 `node --version`，确认客户端继承了 Node.js 24 的 PATH。 |
 | MCP 连接失败 | 在客户端的 `/mcp` 核对实际 `/mcp` URL。访问同一宿主的 `/health/ready` 检查服务是否就绪，远程接入同时核对反向代理的 Host 配置。 |
 | 缺少 API Key | 用带有 workspace key 的环境重新启动客户端。 |
 | `401` 或 `authentication required` | 请管理员核对 key 所属 workspace、有效性及撤销状态。 |
@@ -109,8 +102,11 @@ codex mcp add origence --url "$env:OC_SERVER_URL/mcp" --bearer-token-env-var OC_
 安装后无需另写项目 Hook 配置或启动发送器。每次 Hook 用至多两秒确认身份并尝试上报，
 已入队的记录可在同项目、工作区和凭据的后续 Hook 重试。在身份确认前无法连接时，当前观察会跳过。
 队列位于客户端的插件数据目录，Windows 的目录权限由客户端和用户环境管理。
-已安装本机二进制时，可在启动前设置 `OC_PLUGIN_RUN_HOOK=0` 停止上报。
-继续使用原有项目配置时，关闭插件 Hook 并沿用下文的独立发送器。
+可在启动前设置 `OC_PLUGIN_RUN_HOOK=0` 停止上报。
+
+升级到 0.4.0 时，先退出正在运行的客户端，再刷新 Origence Marketplace 并更新插件，
+最后重新启动并在 Codex 的 `/hooks` 审查新入口。两端共用 Node.js 代码，各自使用客户端提供的私有数据目录。
+队列继续使用原 v1 JSON 文件和事件 ID。升级期间请让旧会话退出，因为新旧版本使用不同的进程锁。
 
 ### 按项目自动归档会话
 

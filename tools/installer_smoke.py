@@ -109,7 +109,7 @@ def installer(env, commands, forbidden, expected=0, *, entry=None, cwd=REPO):
             for item in [json.loads(line)]}
 
 
-def check_hook(binary, project, env, credentials, archive_project):
+def check_hook(project, env, credentials, archive_project):
     ui = credentials["ui"]
     profile, session = request(ui + "/api/console/session", headers={"Origin": ui}, payload={
         "workspace_key": credentials["token"],
@@ -127,7 +127,8 @@ def check_hook(binary, project, env, credentials, archive_project):
     question, answer = "Installer synthetic question", "Installer synthetic answer"
     for payload in (dict(event, hook_event_name="UserPromptSubmit", prompt=question),
                     dict(event, hook_event_name="Stop", last_assistant_message=answer)):
-        child = subprocess.run([str(binary), "plugin-hook", "--client", "claude-code"], cwd=project,
+        hook = REPO / "plugins" / "origence" / "hooks" / "entry.mjs"
+        child = subprocess.run(["node", "--disable-warning=ExperimentalWarning", str(hook), "claude-code"], cwd=project,
                                env=hook_env, input=json.dumps(payload), text=True, capture_output=True,
                                timeout=20, check=True)
         sanitized(child.stdout + child.stderr, [credentials["token"], credentials["deployment_admin_key"]])
@@ -195,7 +196,7 @@ def smoke(binary, claude, codex, root, browser):
         endpoint = f"http://127.0.0.1:{port()}"
     deploy_args = ["--endpoint", endpoint, "--ui-port", str(ui_port), "--data-dir", str(data),
                    "--origence", str(binary)]
-    setup_args = ["--agent", "both", "--origence", str(binary), "--claude", str(claude), "--codex", str(codex)]
+    setup_args = ["--agent", "both", "--claude", str(claude), "--codex", str(codex)]
     deploy_cmd = [str(DEPLOY)]
     setup_cmd = [str(SETUP)]
     project = root / "Claude synthetic project"
@@ -259,7 +260,7 @@ def smoke(binary, claude, codex, root, browser):
         require("401" in failure["installation"]["detail"], "Rejected key must yield an actionable 401")
 
         # The console is already listening. Agent setup only needs the API.
-        claude_only = installer(env_key, ["install", "--from-env", "--agent", "claude", "--origence", str(binary),
+        claude_only = installer(env_key, ["install", "--from-env", "--agent", "claude",
                                          "--claude", str(claude)], forbidden, entry=setup_cmd, cwd=subdir)
         require("claude-code" in claude_only and "codex" not in claude_only,
                 "Selecting Claude must leave Codex untouched")
@@ -297,7 +298,7 @@ def smoke(binary, claude, codex, root, browser):
         if not WINDOWS:
             check = ('test "$OC_API_KEY" = "$EXPECTED" && test "$OC_WORKSPACE_ID" = "$WORKSPACE"'
                      ' && test "$OC_TURN_SYNC_PROJECT" = "$PROJECT"'
-                     ' && { origence --version && origence-setup --help && origence-deploy --help; } >/dev/null'
+                     ' && { node --version && origence-setup --help && origence-deploy --help; } >/dev/null'
                      ' && printf "%s" "$OC_TURN_SYNC_PROJECT"')
             shell_env = dict(env, EXPECTED=credentials["token"], WORKSPACE=credentials["workspace_id"],
                              PROJECT=str(project.resolve()))
@@ -311,15 +312,14 @@ def smoke(binary, claude, codex, root, browser):
             inherited = actual["OC_TURN_SYNC_PROJECT"]
             require(actual["OC_API_KEY"] == credentials["token"] and actual["OC_SERVER_URL"] == endpoint and
                     actual["OC_WORKSPACE_ID"] == credentials["workspace_id"], "New Windows sessions must receive settings")
-            origence = shutil.which("origence.exe", path=actual["PATH"])
-            require(origence is not None and Path(origence).resolve() == binary.resolve(), "Windows PATH is missing Origence")
+            require(shutil.which("node.exe", path=actual["PATH"]) is not None, "Windows PATH is missing Node.js")
             for launch in (SETUP, DEPLOY):
                 found = shutil.which(launch.name, path=actual["PATH"])
                 require(found is not None and Path(found).resolve() == launch, "Windows PATH is missing " + launch.name)
         scoped = dict(env_key, OC_WORKSPACE_ID=credentials["workspace_id"])
         require(Path(inherited).resolve() == project.resolve(), "New sessions must inherit the setup project's Git root")
         check_codex(codex, root / "Codex synthetic project", scoped, credentials, forbidden)
-        hook_run = check_hook(binary, subdir, env, credentials, inherited)
+        hook_run = check_hook(subdir, env, credentials, inherited)
         if browser:
             check_browser(env, credentials, hook_run, forbidden)
 

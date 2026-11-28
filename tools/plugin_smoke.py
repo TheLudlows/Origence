@@ -287,18 +287,20 @@ def diagnostics(base, forbidden):
 
 
 def check_packages():
+    package = REPO / "plugins" / "origence"
+    require((package / "hooks" / "entry.mjs").is_file(), "Missing shared Node hook")
     for client, manifest_dir in (("claude-code", ".claude-plugin"), ("codex", ".codex-plugin")):
-        package = REPO / "plugins" / client / "origence"
-        require({path.name for path in package.iterdir()} == {manifest_dir, ".mcp.json", "hooks"},
-                "Plugin must ship MCP and Hook configurations")
         manifest = json.loads((package / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
-        require(manifest.get("mcpServers") == "./.mcp.json", "Plugin is missing its MCP declaration")
-        server = json.loads((package / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]["origence"]
+        server = json.loads((package / manifest["mcpServers"]).read_text(encoding="utf-8"))["mcpServers"]["origence"]
         require("command" not in server and server["url"].endswith("/mcp"), "Plugin must use HTTP MCP")
-        if client == "codex":
-            require(manifest.get("hooks") == "./hooks/hooks.json", "Plugin is missing its Hook declaration")
-        hooks = json.loads((package / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+        hooks = json.loads((package / manifest["hooks"]).read_text(encoding="utf-8"))["hooks"]
         require({"UserPromptSubmit", "PostToolUse", "Stop"} <= hooks.keys(), "Plugin is missing lifecycle events")
+        for groups in hooks.values():
+            for group in groups:
+                for handler in group["hooks"]:
+                    command = json.dumps(handler)
+                    require("node" in command and "entry.mjs" in command and "plugin-hook" not in command,
+                            "Hook does not use the packaged Node entry point")
 
 
 def check_hook_run(host, summary, component, forbidden, workspace):
@@ -368,7 +370,7 @@ def main():
             path_name = next(name for name in env if name.upper() == "PATH")
             if path_name != "PATH":
                 env["PATH"] = env.pop(path_name)
-            require(shutil.which(binary.name, path=env["PATH"]) is None, "Reader test requires a PATH without Origence")
+            require(shutil.which(binary.name, path=env["PATH"]) is None, "Both clients require a PATH without the Origence executable")
             env.update(HOME=str(root), USERPROFILE=str(root), OC_API_KEY=reader["token"])
             # Each Windows client uses disposable configuration and cache roots.
             if os.name == "nt":
@@ -390,8 +392,7 @@ def main():
                 execute(["git", "init", "-q"], project, env, forbidden)
                 client_env = dict(env, CODEX_HOME=str(config), CLAUDE_CONFIG_DIR=str(config))
                 print(execute([cli, "--version"], project, client_env, forbidden).strip(), flush=True)
-                writer_env = dict(client_env, OC_API_KEY=writer["token"], OC_WORKSPACE_ID=selected,
-                                  PATH=str(binary_dir) + os.pathsep + client_env["PATH"])
+                writer_env = dict(client_env, OC_API_KEY=writer["token"], OC_WORKSPACE_ID=selected)
                 if label == "Codex":
                     run(cli, project, client_env, forbidden, default, switched, writer_env, host.base)
                 else:

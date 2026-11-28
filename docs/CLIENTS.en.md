@@ -24,14 +24,13 @@ Launch the client from that terminal, check `/mcp`, and call `context_session` t
 Direct clients use the credential's default workspace unless their HTTP requests supply the
 `X-Origence-Workspace` header for an authorized workspace. The plugins below take this header from `OC_WORKSPACE_ID`.
 
-Retrieval and explicit tool calls require no local Origence binary. The bundled automatic Run hook uses the binary. See [remote MCP deployment](OPERATIONS.en.md#remote-mcp).
+MCP uses HTTP. The bundled Run hook and session archiving use Node.js 24 on the client. See [remote MCP deployment](OPERATIONS.en.md#remote-mcp).
 
 ## Install the `origence` plugin
 
 Prepare a reachable Origence HTTP host and a client that supports plugin marketplaces. The plugin installs HTTP
 MCP and enables the private Run hook by default. Ask the workspace administrator for a personal API key.
-Use a `reader` key to retrieve material, or a `writer` key and a local executable that supports
-`origence plugin-hook` to report Runs. An administrator issues the required credential from the console or administration API.
+Use a `reader` key for retrieval or a writable key to report Runs. Check `node --version` in the client launch environment to confirm Node.js 24 or later. An administrator issues the required credential from the console or administration API.
 For retrieval alone, you can [register the endpoint directly](#direct-http-mcp).
 
 Launch the client from the terminal that sets `OC_API_KEY`. The default API origin is
@@ -41,14 +40,6 @@ Launch the client from the terminal that sets `OC_API_KEY`. The default API orig
 $env:OC_SERVER_URL = 'http://127.0.0.1:8080'
 $secret = Read-Host 'OC_API_KEY' -AsSecureString
 $env:OC_API_KEY = [Net.NetworkCredential]::new('', $secret).Password
-```
-
-For automatic Run reporting, add the Origence executable's directory to `PATH` before launch. The Windows
-example handles spaces in the directory:
-
-```powershell
-$origenceExe = (Get-Item -LiteralPath 'C:\Program Files\Origence\origence.exe').FullName
-$env:Path = (Split-Path -Parent $origenceExe) + [IO.Path]::PathSeparator + $env:Path
 ```
 
 ### Claude Code
@@ -99,7 +90,7 @@ to find a known published item. Pass the hit's `asset_id` and `version` to
 
 | Symptom | Check |
 | --- | --- |
-| Hook cannot find `origence` | Run `Get-Command origence -CommandType Application` (Windows) or `command -v origence` in the same terminal. Check it resolves to the intended binary. |
+| Hook cannot find Node.js | Run `node --version` in the same environment used to launch the client and confirm that Node.js 24 is on its PATH. |
 | Cannot connect to MCP | Check the configured `/mcp` URL from the client's `/mcp` screen and the same server's `/health/ready` endpoint. For remote hosts, check the proxy's Host configuration. |
 | Missing API key | Relaunch the client with the workspace key in its environment. |
 | `401` or `authentication required` | Ask the administrator to verify the key is valid and belongs to the intended workspace. |
@@ -116,8 +107,13 @@ The installed hook requires no project configuration or separate sender. Each in
 has a two-second budget for identity verification and delivery. Enqueued observations can
 retry on later hooks for the same project, workspace and credential. An observation is
 skipped if identity cannot be verified before enqueueing. Queues live in client plugin data.
-On Windows, directory permissions are managed by the client and user environment. With the local binary
-installed, set `OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
+On Windows, directory permissions are managed by the client and user environment. Set
+`OC_PLUGIN_RUN_HOOK=0` before startup to stop Run reporting.
+
+For the upgrade to 0.4.0, stop running clients, refresh the Origence marketplace and update the plugin,
+then restart and review the new definition in Codex `/hooks`. Both clients share the Node.js code and
+use their own private plugin data directories. The original v1 JSON spool and event IDs carry forward.
+The old and new versions use different process locks, so finish old sessions before upgrading.
 
 ### Automatic session archiving by project
 

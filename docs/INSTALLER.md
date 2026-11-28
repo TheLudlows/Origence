@@ -25,9 +25,9 @@
 
 `--agent both` 可用同一地址和 Key 一次接好两端。省略 `--agent` 时安装 Claude Code。两端复用各自已安装的 CLI，或通过 npm 获取固定版本。若 CLI 不在 PATH，使用 `--claude` 或 `--codex` 指定路径。[客户端接入细节](CLIENTS.md)
 
-按提示输入 API 地址和工作区 Key，Key 输入不回显。本机 API 通常是 `http://127.0.0.1:8080`，远程地址使用 HTTPS，省略 `/mcp`。可用 `--endpoint` 和 `--token` 传参，自动化优先通过启动环境传入 `OC_SERVER_URL` 和 `OC_API_KEY` 后加 `--from-env`，避免 Key 进入命令行历史。只检索使用 `reader`，Run Hook 上报要求写权限。Hook 仍由本机 Origence 二进制处理。
+按提示输入 API 地址和工作区 Key，Key 输入不回显。本机 API 通常是 `http://127.0.0.1:8080`，远程地址使用 HTTPS，省略 `/mcp`。可用 `--endpoint` 和 `--token` 传参，自动化优先通过启动环境传入 `OC_SERVER_URL` 和 `OC_API_KEY` 后加 `--from-env`，避免 Key 进入命令行历史。只检索使用 `reader`，Run Hook 上报要求写权限。Hook 使用插件自带的 Node.js 实现。
 
-接入脚本核对 API、Key 所属工作区和 MCP 工具，再安装 Agent 插件，保存客户端与 Hook 所需的用户环境和 PATH。Codex 非默认地址通过官方 CLI 配置，已有冲突的 MCP 配置会报错并要求用户处理。接入脚本只使用已有 API，不需要控制台端口。
+接入脚本核对 API、Key 所属工作区和 MCP 工具，再安装 Agent 插件，保存客户端与 Hook 所需的用户环境和 PATH。Codex 非默认地址通过官方 CLI 配置，已有冲突的 MCP 配置会报错并要求用户处理。接入脚本只使用已有 API，负责把 Node.js 放进客户端的 PATH。
 
 Windows 的 Agent 接入仅在用户环境变量 `OC_API_KEY` 中持久化工作空间 Key。默认重装优先读取该用户变量，找不到时使用当前进程环境或提示输入。更新接入配置时，安装器移除旧 Agent 安装记录中的 Key 原文，只保留用于识别已设置值的摘要。卸载清除安装器设置且仍匹配的 Key，保留安装前已有的相同值及后来手工更改的值。主动替换 Key 时会丢弃旧值。
 

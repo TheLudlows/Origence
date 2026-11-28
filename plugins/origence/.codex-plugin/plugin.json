@@ -1,7 +1,7 @@
 {
   "name": "origence",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Retrieve Origence workspace materials and report private Run metadata.",
-  "author": { "name": "TheLudlows" },
-  "mcpServers": "./.mcp.json"
+  "mcpServers": "./codex.mcp.json",
+  "hooks": "./hooks/codex.json"
 }

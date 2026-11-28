@@ -28,8 +28,8 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm test
-      - name: Managed agent Run protocol fixtures
-        run: node --test ../tools/managed-run/managed-run.test.mjs
+      - name: Agent Run protocol and plugin hook fixtures
+        run: node --disable-warning=ExperimentalWarning --test ../tools/managed-run/managed-run.test.mjs ../tools/plugin-hook.test.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: node-ui-dist
@@ -98,6 +98,9 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
           cache-on-failure: true
       # Ubuntu 24.04 includes make/g++; no-default-features is covered in fast-check.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - run: cargo clippy --locked --all-targets -j 2 -- -D warnings
       - name: Default-feature tests and smoke binary
         run: |
@@ -140,9 +143,6 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: ${{ env.ANYSEEK_FIXTURE_TOOLCHAIN }}
         run: cargo build --locked --manifest-path .anyseek-fixture/Cargo.toml --no-default-features --bin anyseek_server -j 2
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
       - uses: actions/download-artifact@v4
         with:
           name: node-ui-dist
@@ -180,6 +180,9 @@ jobs:
           prefix-key: v3-sqlite
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'pull_request' }}
           cache-on-failure: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - name: Build tools, lint, and all local lifecycle tests
         shell: pwsh
         run: ./tools/build.ps1 -Action Validate -Jobs 1 -SkipFormatCheck

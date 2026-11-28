@@ -6,7 +6,7 @@
     {
       "name": "origence",
       "description": "Retrieve Origence workspace materials and report private Run metadata.",
-      "source": "./plugins/claude-code/origence"
+      "source": "./plugins/origence"
     }
   ]
 }

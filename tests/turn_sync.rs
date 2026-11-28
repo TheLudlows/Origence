@@ -27,7 +27,7 @@ use std::{
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use super::client_hooks::HookFixture;
+use super::client_hooks::{HOOK_ENTRY, HookFixture};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Submission {
@@ -82,20 +82,19 @@ impl Plugin<'_> {
     }
 
     async fn invoke_from(&self, cwd: &Path, event: Value, project: Option<&Path>) -> Output {
-        let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
+        let mut command = tokio::process::Command::new("node");
         command
             .current_dir(cwd)
             .env("OC_API_KEY", self.token)
             .env("OC_WORKSPACE_ID", self.workspace.to_string())
+            .env("OC_SERVER_URL", self.base)
             .env("OC_PLUGIN_RUN_HOOK", "0")
             .env("PLUGIN_DATA", &self.data)
             .env("CLAUDE_PLUGIN_DATA", &self.data)
             .env_remove("OC_TURN_SYNC_PROJECT")
             .args([
-                "--server-url",
-                self.base,
-                "plugin-hook",
-                "--client",
+                "--disable-warning=ExperimentalWarning",
+                HOOK_ENTRY,
                 self.client,
             ])
             .stdin(Stdio::piped())
