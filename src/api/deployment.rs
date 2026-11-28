@@ -4,7 +4,7 @@ use crate::{
     error::Result,
     memory_semantics::SemanticMemoryInput,
     service::Service,
-    types::{IdentifiedMemoryInput, KnowledgeInput},
+    types::{IdentifiedMemoryInput, KnowledgeInput, RestoreInput},
 };
 use axum::{
     Json, Router,
@@ -48,6 +48,14 @@ pub(super) fn routes() -> Router<Service> {
         .route(
             "/admin/deployment/workspaces/{workspace}/assets/{asset}",
             get(asset).delete(delete_asset),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/assets/{asset}/restore",
+            post(restore_asset),
+        )
+        .route(
+            "/admin/deployment/workspaces/{workspace}/events/{event}",
+            get(content_source).delete(retract_source),
         )
         .route(
             "/admin/deployment/workspaces/{workspace}/memories/identified",
@@ -337,6 +345,44 @@ async fn delete_asset(
     Ok(uncached_json(
         service
             .delete(&auth, key(&headers)?, asset, "asset")
+            .await?,
+    ))
+}
+
+async fn restore_asset(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((workspace, asset)): Path<(Uuid, Uuid)>,
+    Json(input): Json<RestoreInput>,
+) -> Result<impl IntoResponse> {
+    let auth = service
+        .authorize_deployment_workspace(token(&headers)?, workspace)
+        .await?;
+    Ok(uncached_json(
+        service.restore(&auth, key(&headers)?, asset, input).await?,
+    ))
+}
+
+async fn content_source(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((workspace, event)): Path<(Uuid, Uuid)>,
+) -> Result<impl IntoResponse> {
+    Ok(uncached_json(
+        service
+            .inspect_content_source(token(&headers)?, workspace, event)
+            .await?,
+    ))
+}
+
+async fn retract_source(
+    State(service): State<Service>,
+    headers: HeaderMap,
+    Path((workspace, event)): Path<(Uuid, Uuid)>,
+) -> Result<impl IntoResponse> {
+    Ok(uncached_json(
+        service
+            .retract_deployment_source(token(&headers)?, workspace, key(&headers)?, event)
             .await?,
     ))
 }

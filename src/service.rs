@@ -697,6 +697,17 @@ impl Service {
         if !["asset", "event", "file"].contains(&target) {
             return Err(AppError::Invalid("invalid deletion target".into()));
         }
+        self.delete_target(a, key, id, target, true).await
+    }
+
+    async fn delete_target(
+        &self,
+        a: &AuthContext,
+        key: &str,
+        id: Uuid,
+        target: &str,
+        include_archive: bool,
+    ) -> Result<Value> {
         let operation = format!("delete/{target}/{id}");
         let (mut tx, cached) = self
             .command(a, Permission::Delete, &operation, key, &json!({}))
@@ -710,7 +721,7 @@ impl Service {
             }
             return Ok(receipt);
         }
-        if target == "event" {
+        if target == "event" && include_archive {
             let address = tx.native_archive_turn_for_source(id).await?;
             if address.is_some() || !tx.event_exists(id).await? {
                 tx.rollback().await?;
@@ -739,6 +750,7 @@ impl Service {
         }
         let changed = match target {
             "asset" => tx.delete_asset(id).await?,
+            "event" if !include_archive => tx.retract_content_source(id).await?,
             "event" => tx.retract_event(id).await?,
             _ => tx.delete_file(id).await?,
         };

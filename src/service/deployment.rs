@@ -172,4 +172,35 @@ impl Service {
         self.read_asset(ReadAccess::Deployment { token, workspace }, asset, version)
             .await
     }
+
+    pub async fn inspect_content_source(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        source: Uuid,
+    ) -> Result<Value> {
+        let auth = self
+            .authorize_deployment_workspace(token, workspace)
+            .await?;
+        let mut tx = self.read(&auth, Permission::Write).await?;
+        let event = tx.event_view(source).await?;
+        if event["kind"] == "session_turn" {
+            return Err(AppError::Forbidden);
+        }
+        tx.commit().await?;
+        Ok(event)
+    }
+
+    pub async fn retract_deployment_source(
+        &self,
+        token: &str,
+        workspace: Uuid,
+        key: &str,
+        source: Uuid,
+    ) -> Result<Value> {
+        let auth = self
+            .authorize_deployment_workspace(token, workspace)
+            .await?;
+        self.delete_target(&auth, key, source, "event", false).await
+    }
 }

@@ -115,22 +115,37 @@ async function run(binary) {
     await createKnowledge.getByRole("button", { name: "查看内容 →", exact: true }).click();
     await createKnowledge.waitFor({ state: "detached" });
     await page.getByText("合成正文第一版", { exact: true }).waitFor();
-    await page.getByRole("button", { name: "更新知识", exact: true }).click();
+    await page.getByRole("button", { name: "更新内容", exact: true }).click();
     const updateKnowledge = open("更新知识");
     await updateKnowledge.getByLabel("正文", { exact: true }).fill("合成正文第二版");
     await updateKnowledge.getByRole("button", { name: "提交新版本", exact: true }).click();
     await updateKnowledge.getByRole("button", { name: "查看内容 →", exact: true }).click();
     await page.getByText("合成正文第二版", { exact: true }).waitFor();
+    await page.getByLabel("读取固定历史版本", { exact: true }).fill("1");
+    await page.getByRole("button", { name: "读取版本", exact: true }).click();
+    await page.getByText("合成正文第一版", { exact: true }).waitFor();
+    page.once("dialog", (dialog) => {
+      assert.equal(dialog.type(), "prompt");
+      void dialog.accept("恢复经核实的正文");
+    });
+    await page.getByRole("button", { name: "恢复此版本", exact: true }).click();
+    await page.getByRole("button", { name: "查看内容 →", exact: true }).click();
+    await page.getByText("v3", { exact: true }).waitFor();
+    await page.getByText("合成正文第一版", { exact: true }).waitFor();
+    await page.getByRole("tab", { name: "原始来源", exact: true }).click();
+    await page.getByRole("tabpanel", { name: "原始来源", exact: true }).getByText(/合成正文第一版/).waitFor();
     page.once("dialog", (dialog) => {
       assert.match(dialog.message(), /独立试点/);
       void dialog.accept();
     });
-    await page.getByRole("button", { name: "删除知识", exact: true }).click();
+    await page.getByRole("button", { name: "撤回来源", exact: true }).click();
+    await page.getByRole("heading", { name: "内容已阻断", exact: true }).waitFor();
+    await page.getByRole("button", { name: "返回列表", exact: true }).click();
     await page.getByText("暂无记录", { exact: true }).waitFor();
     await page.getByRole("button", { name: "全局知识审核", exact: true }).click();
     await page.getByRole("heading", { name: "全局知识审核", exact: true }).waitFor();
     assert.ok(secrets.every((value) => !stderr.includes(value)));
-    console.log("PASS Chromium and Origence: scoped key management, deployment sign-in, workspace creation and rotation, scoped knowledge create/update/delete, global review");
+    console.log("PASS Chromium and Origence: scoped key management, deployment sign-in, workspace creation and rotation, scoped knowledge create/update/restore and source withdrawal, global review");
   } finally {
     await browser?.close();
     if (ui) { ui.closeAllConnections(); ui.close(); }

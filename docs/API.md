@@ -166,9 +166,11 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | `POST /memories/identified`、`POST /memories/semantic` | 创建或更新有明确身份的记忆 |
 | `POST /files`、`POST /knowledge` | 上传知识文件，创建知识或提交新版 |
 | `DELETE /assets/{asset}` | 删除本区的记忆或知识条目 |
+| `POST /assets/{asset}/restore` | 将来源仍有效的历史版本恢复为新版本，提交目标版本、预期当前版本和恢复原因 |
+| `GET /events/{event}`、`DELETE /events/{event}` | 查看和撤回内容来源。依赖被撤回来源的版本和引用停止读取，源记录保留 |
 | `GET /jobs/{job}`、`POST /jobs/{job}/{action}` | 查看本区任务，按现有任务规则执行 `retry` 或 `cancel` |
 
-分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员可读取所选工作区的原始问答和 Run。普通工作区接口继续使用工作区 Key。
+恢复和撤回复用工作区的版本与来源规则。语义记忆通过显式语义写入更新。分页接口使用 `after` 和 `limit`。目录最多 100 项，问答页最多 32 轮。响应禁止缓存。管理员可在选定工作区读取 Run 和已保存的原始问答。原始问答沿用会话保留规则。普通工作区接口继续使用工作区 Key。
 
 ### 全局知识
 

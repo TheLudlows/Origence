@@ -434,6 +434,235 @@ async fn deployment_admin_content_writes_use_workspace_scope_and_audit_actor() {
 }
 
 #[tokio::test]
+async fn administrator_restores_valid_history_and_withdraws_only_scoped_content_sources() {
+    let dir = tempfile::tempdir().unwrap();
+    let service = open_service(dir.path(), Models::disabled()).await.unwrap();
+    let store = service.engine.relational();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let other = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    let workspace_key = store.create_key_workspace(scope, "First").await.unwrap();
+    store.create_key_workspace(other, "Other").await.unwrap();
+    let admin = store.rotate_deployment_admin().await.unwrap();
+    let actor = service
+        .authorize_deployment_workspace(&admin, scope.workspace_id)
+        .await
+        .unwrap();
+    let agent = service.auth(&workspace_key.token).await.unwrap();
+    let first = service
+        .knowledge(
+            &agent,
+            "v1",
+            serde_json::from_value(json!({
+                "title":"Hotel policy","content":"100 per night"
+            }))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let asset: Uuid = serde_json::from_value(first["asset_id"].clone()).unwrap();
+    let source: Uuid = serde_json::from_value(first["source_event_id"].clone()).unwrap();
+    while origence::worker::process_next(&service).await.unwrap() {}
+    service.knowledge(&agent, "v2", serde_json::from_value(json!({
+        "title":"Hotel policy","content":"80 per night","asset_id":asset,"expected_version":1
+    })).unwrap()).await.unwrap();
+    let session: Uuid = serde_json::from_value(
+        service.private_session(&agent).await.unwrap()["session_id"].clone(),
+    )
+    .unwrap();
+    let turn = Uuid::new_v4();
+    let archived = service.archive_turn(&agent, "archive", session, serde_json::from_value(json!({
+        "turn_id":turn,"question":"Private question","answer":"Private answer","used_evidence":[]
+    })).unwrap()).await.unwrap();
+    let archive_source = archived["source_event_id"].as_str().unwrap();
+    while origence::worker::process_next(&service).await.unwrap() {}
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let router = origence::api::router(service.clone());
+    let host = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+    let client = HostClient::new(&origin, admin.clone()).unwrap();
+    let ordinary = HostClient::new(&origin, workspace_key.token).unwrap();
+    let selected = format!("/admin/deployment/workspaces/{}", scope.workspace_id);
+    let outside = format!("/admin/deployment/workspaces/{}", other.workspace_id);
+    let restore_path = format!("{selected}/assets/{asset}/restore");
+    let retract_path = format!("{selected}/events/{source}");
+    let restore =
+        json!({"target_version":1,"expected_version":2,"reason":"Correct mistaken revision"});
+    assert!(matches!(
+        ordinary
+            .call(Method::POST, &restore_path, Some(&restore), Some("restore"))
+            .await,
+        Err(AppError::Unauthorized)
+    ));
+    assert!(matches!(
+        ordinary
+            .call(Method::DELETE, &retract_path, None, Some("withdraw"))
+            .await,
+        Err(AppError::Unauthorized)
+    ));
+    assert!(matches!(
+        client
+            .call(
+                Method::POST,
+                &format!("{outside}/assets/{asset}/restore"),
+                Some(&restore),
+                Some("restore")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    for method in [Method::GET, Method::DELETE] {
+        assert!(matches!(
+            client
+                .call(
+                    method.clone(),
+                    &format!("{outside}/events/{source}"),
+                    None,
+                    Some("withdraw")
+                )
+                .await,
+            Err(AppError::NotFound)
+        ));
+        assert!(matches!(
+            client
+                .call(
+                    method,
+                    &format!("{selected}/events/{archive_source}"),
+                    None,
+                    Some("withdraw")
+                )
+                .await,
+            Err(AppError::Forbidden)
+        ));
+    }
+    assert_eq!(
+        service.session_turn(&agent, session, turn).await.unwrap()["answer"],
+        "Private answer"
+    );
+    assert_eq!(
+        client
+            .call(Method::GET, &retract_path, None, None)
+            .await
+            .unwrap()["content"],
+        "100 per night"
+    );
+    assert!(matches!(
+        client
+            .call(
+                Method::POST,
+                &restore_path,
+                Some(&json!({"target_version":1,"expected_version":1,"reason":"Stale revision"})),
+                Some("stale")
+            )
+            .await,
+        Err(AppError::Conflict(_))
+    ));
+    let receipt = client
+        .call(Method::POST, &restore_path, Some(&restore), Some("restore"))
+        .await
+        .unwrap();
+    assert_eq!(
+        client
+            .call(Method::POST, &restore_path, Some(&restore), Some("restore"))
+            .await
+            .unwrap(),
+        receipt
+    );
+    while origence::worker::process_next(&service).await.unwrap() {}
+    let restored = service.get(&agent, asset, None).await.unwrap();
+    assert_eq!(restored["version"], 3);
+    assert_eq!(restored["restored_from"], 1);
+    assert_eq!(restored["content"], "100 per night");
+    assert_eq!(restored["source_event_id"], json!(source));
+
+    let pending = service
+        .restore(
+            &agent,
+            "pending-restore",
+            asset,
+            serde_json::from_value(
+                json!({"target_version":1,"expected_version":3,"reason":"Pending restore"}),
+            )
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let pending_job = serde_json::from_value(pending["job_id"].clone()).unwrap();
+    let removed = client
+        .call(Method::DELETE, &retract_path, None, Some("withdraw"))
+        .await
+        .unwrap();
+    assert_eq!(removed["originals_retained"], true);
+    assert_eq!(
+        service.job(&agent, pending_job).await.unwrap()["state"],
+        "cancelled"
+    );
+    assert_eq!(
+        client
+            .call(Method::DELETE, &retract_path, None, Some("withdraw"))
+            .await
+            .unwrap(),
+        removed
+    );
+    assert!(matches!(
+        service
+            .inspect_content_source(&admin, scope.workspace_id, source)
+            .await,
+        Err(AppError::NotFound)
+    ));
+    for version in [1, 3] {
+        assert!(matches!(
+            service.get(&agent, asset, Some(version)).await,
+            Err(AppError::NotFound)
+        ));
+    }
+    assert_eq!(
+        service.get(&agent, asset, Some(2)).await.unwrap()["content"],
+        "80 per night"
+    );
+    assert!(matches!(
+        client
+            .call(
+                Method::POST,
+                &restore_path,
+                Some(&json!({"target_version":1,"expected_version":3,"reason":"Revoked source"})),
+                Some("revoked")
+            )
+            .await,
+        Err(AppError::NotFound)
+    ));
+    while origence::worker::process_next(&service).await.unwrap() {}
+    let retained: (String, String) = origence::storage::sqlite_db::query_as(
+        "SELECT state,content FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(source)
+    .fetch_one(store.pool())
+    .await
+    .unwrap();
+    assert_eq!(retained, ("retracted".into(), "100 per night".into()));
+    let audited: Vec<(String, Uuid)> = origence::storage::sqlite_db::query_as(
+        "SELECT action,target FROM oc_audit WHERE tenant_id=? AND workspace_id=? AND actor=? AND action IN ('asset.restore_authorized','source.logical_delete') ORDER BY action",
+    ).bind(scope.tenant_id).bind(scope.workspace_id).bind(actor.id).fetch_all(store.pool()).await.unwrap();
+    assert_eq!(
+        audited,
+        vec![
+            ("asset.restore_authorized".into(), asset),
+            ("source.logical_delete".into(), source)
+        ]
+    );
+    host.abort();
+    service.engine.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn workspace_archive_extracts_once_across_restart_and_rotation() {
     use axum::{Json, Router, routing::post};
     use serde_json::Value;

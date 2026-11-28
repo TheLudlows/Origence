@@ -3,6 +3,7 @@ import { button, code, cursor, el, field, form, heading, input, message, paged, 
 import type { Asset, Page, Run, RunEvent } from "./types.js";
 import { globalReviewPage } from "./global-knowledge.js";
 import { editor } from "./asset-editor.js";
+import { assetDetail } from "./assets.js";
 
 const prefix = "/admin/deployment/workspaces";
 type Workspace = { workspace_id: string; name: string };
@@ -89,11 +90,11 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     const base = `${prefix}/${encodeURIComponent(workspace.workspace_id)}`;
     const view = el("div");
     let viewLifetime: AbortController | undefined;
-    const show = (headingText: string, render: (target: HTMLElement, viewSignal: AbortSignal) => void) => {
+    const show = (headingText: string | null, render: (target: HTMLElement, viewSignal: AbortSignal) => void) => {
       viewLifetime?.abort();
       viewLifetime = new AbortController();
       const viewSignal = AbortSignal.any([scope, viewLifetime.signal]);
-      const section = panel(headingText);
+      const section = headingText ? panel(headingText) : el("div");
       view.replaceChildren(section);
       render(section, viewSignal);
     };
@@ -121,38 +122,20 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     const label = (kind: Asset["kind"]) => kind === "memory" ? "记忆" : "知识";
     const editContext = (kind: Asset["kind"], signal: AbortSignal): ViewContext => ({
       role: "admin", signal,
-      navigate: (page, id) => { if (page === "asset" && id) openAsset(kind, id); },
+      navigate: (page, id, version) => {
+        if (page === "asset" && id) openAsset(kind, id, version);
+        else if (page === kind) assets(kind);
+      },
     });
-    const openAsset = (kind: Asset["kind"], assetId: string, version?: number) => show(label(kind), (target, viewSignal) => {
-      const path = `${base}/assets/${encodeURIComponent(assetId)}`;
-      const detail = version === undefined ? path : `${path}?version=${version}`;
-      void api.get<Asset>(detail, viewSignal).then((value) => {
-        if (viewSignal.aborted) return;
-        const feedback = el("div");
-        const key = crypto.randomUUID();
-        const remove = button(`删除${label(kind)}`, async () => {
-          if (remove.disabled || !window.confirm(`删除工作区「${workspace.name}」中的「${value.title}」？删除后无法读取该条目的所有版本。`)) return;
-          remove.disabled = true;
-          feedback.replaceChildren();
-          try {
-            await api.request(path, { method: "DELETE", key, signal: viewSignal });
-            if (!viewSignal.aborted) assets(kind);
-          } catch (error) {
-            if (!viewSignal.aborted) message(feedback, error);
-          } finally {
-            remove.disabled = false;
+    const openAsset = (kind: Asset["kind"], assetId: string, version?: number) => show(null, (target, viewSignal) => {
+      void assetDetail(target, assetId, version, editContext(kind, viewSignal), { base, workspaceName: workspace.name })
+        .catch((error: unknown) => {
+          if (!viewSignal.aborted) {
+            const feedback = el("div");
+            message(feedback, error);
+            target.replaceChildren(button("返回列表", () => assets(kind)), feedback);
           }
-        }, "danger");
-        target.append(el("h3", "", value.title), el("p", "muted", `v${value.version}`),
-          el("p", "plain-text", value.content ?? ""), el("div", "actions",
-            button("返回列表", () => assets(kind)),
-            kind === "knowledge" || value.identity
-              ? button(`更新${label(kind)}`, () => editor(kind, editContext(kind, viewSignal), value, base))
-              : null,
-            remove), feedback);
-      }).catch((error: unknown) => {
-        if (!viewSignal.aborted) message(target, error);
-      });
+        });
     });
     const assets = (kind: Asset["kind"]) => show(label(kind), (target, viewSignal) => {
       target.append(button(`新建${label(kind)}`, () => editor(kind, editContext(kind, viewSignal), undefined, base)));

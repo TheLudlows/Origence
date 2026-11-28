@@ -122,9 +122,11 @@ The following paths are relative to `/admin/deployment/workspaces/{id}`. Mutatio
 | `POST /memories/identified`, `POST /memories/semantic` | Create or update memories with explicit identities |
 | `POST /files`, `POST /knowledge` | Upload a knowledge file and create or revise knowledge |
 | `DELETE /assets/{asset}` | Delete a memory or knowledge item in the selected workspace |
+| `POST /assets/{asset}/restore` | Create a new version from an earlier version with a valid source. Supply the target version, expected current version, and reason. |
+| `GET /events/{event}`, `DELETE /events/{event}` | Read or withdraw a content source. Dependent versions and references become unreadable, and the original record is retained. |
 | `GET /jobs/{job}`, `POST /jobs/{job}/{action}` | Read a workspace job or apply `retry` or `cancel` under its existing state rules |
 
-Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read original turns and Runs in the selected workspace. Regular workspace endpoints use workspace keys.
+Restore and withdrawal follow the workspace's version and source rules. Semantic memories are updated through explicit semantic writes. Paginated endpoints accept `after` and `limit`. Catalog pages contain up to 100 items and archive pages up to 32 turns. Responses disable caching. Administrators can read Runs and saved original turns in the selected workspace. Original turns follow the existing session retention rules. Regular workspace endpoints use workspace keys.
 
 ### Global knowledge
 

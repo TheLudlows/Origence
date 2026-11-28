@@ -16,9 +16,9 @@ const deploymentWorkspacePath = new RegExp(`^/admin/deployment/workspaces/${uuid
 const deploymentKeys = new RegExp(`^/admin/deployment/workspaces/${uuid}/keys$`);
 const deploymentRotate = new RegExp(`^/admin/deployment/workspaces/${uuid}/keys/rotate$`);
 const agentPath = "/admin/agents";
-const deploymentPath = new RegExp(`^/admin/deployment/workspaces(?:/${uuid}/(?:sessions(?:/${uuid}/turns)?|runs(?:/${uuid})?|assets(?:/${uuid})?))?$`);
-const deploymentContentPost = new RegExp(`^/admin/deployment/workspaces/${uuid}/(?:knowledge|files|memories/(?:identified|semantic)|jobs/${uuid}/(?:retry|cancel))$`);
-const deploymentAsset = new RegExp(`^/admin/deployment/workspaces/${uuid}/assets/${uuid}$`);
+const deploymentPath = new RegExp(`^/admin/deployment/workspaces(?:/${uuid}/(?:sessions(?:/${uuid}/turns)?|runs(?:/${uuid})?|assets))?$`);
+const deploymentContentPost = new RegExp(`^/admin/deployment/workspaces/${uuid}/(?:knowledge|files|memories/(?:identified|semantic)|assets/${uuid}/restore|jobs/${uuid}/(?:retry|cancel))$`);
+const deploymentContentItem = new RegExp(`^/admin/deployment/workspaces/${uuid}/(?:assets|events)/${uuid}$`);
 const deploymentJob = new RegExp(`^/admin/deployment/workspaces/${uuid}/jobs/${uuid}$`);
 const globalReviewRead = new RegExp(`^/admin/deployment/global-knowledge(?:/${uuid})?$`);
 const globalReviewWrite = new RegExp(`^/admin/deployment/global-knowledge/${uuid}/review$`);
@@ -154,10 +154,10 @@ export function createUiServer(options: ServerOptions) {
           return;
         }
         const path = target.pathname.slice(4);
-        const deploymentOperation = req.method === "GET" && (deploymentPath.test(path) || deploymentKeys.test(path) || deploymentJob.test(path) || globalReviewRead.test(path))
+        const deploymentOperation = req.method === "GET" && (deploymentPath.test(path) || deploymentContentItem.test(path) || deploymentKeys.test(path) || deploymentJob.test(path) || globalReviewRead.test(path))
           || req.method === "PUT" && deploymentWorkspacePath.test(path)
           || req.method === "POST" && (deploymentContentPost.test(path) || globalReviewWrite.test(path) || deploymentRotate.test(path))
-          || req.method === "DELETE" && deploymentAsset.test(path);
+          || req.method === "DELETE" && deploymentContentItem.test(path);
         const viewingAgents = req.method === "GET" && path === agentPath;
         if (
           !deploymentOperation &&
