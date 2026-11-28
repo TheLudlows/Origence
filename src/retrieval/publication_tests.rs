@@ -2,6 +2,8 @@
 //! Search and Context call this exact helper; no production fault hook or native
 //! timing assumptions are needed to exercise the publication boundary.
 use super::*;
+#[cfg(test)]
+use crate::fixture_keys::FixtureKeys;
 use crate::storage::{
     AuthorizedScope, LedgerEntry, LedgerKey, Lifecycle, RelationalStore, Scope, SqliteStore,
     Surface, VectorStore, sqlite_db as db,

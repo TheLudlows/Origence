@@ -6,6 +6,7 @@
 //! uses deterministic localhost fixtures; no model quality or native ranking is evaluated.
 #![cfg(feature = "host")]
 
+use crate::fixture_keys::FixtureKeys;
 use axum::{Json, Router, routing::post};
 use origence::{
     error::AppError,

@@ -866,16 +866,4 @@ impl Service {
         tx.commit().await?;
         Ok(bytes)
     }
-    pub async fn issue_key(&self, a: &AuthContext, role: &str) -> Result<Value> {
-        let mut tx = self.write(a, Permission::WorkspaceAdmin).await?;
-        let key = tx.issue_scoped_key(role).await?;
-        tx.commit().await?;
-        Ok(json!(key))
-    }
-    pub async fn revoke_key(&self, a: &AuthContext, id: Uuid) -> Result<Value> {
-        let mut tx = self.write(a, Permission::WorkspaceAdmin).await?;
-        tx.revoke_scoped_key(id).await?;
-        tx.commit().await?;
-        Ok(json!({"key_id":id,"revoked":true}))
-    }
 }

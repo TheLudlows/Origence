@@ -61,3 +61,9 @@ pub mod worker;
 pub mod client;
 #[cfg(feature = "host")]
 pub mod host;
+
+#[cfg(all(test, feature = "sqlite"))]
+extern crate self as origence;
+#[cfg(all(test, feature = "sqlite"))]
+#[path = "../tests/support/fixture_keys.rs"]
+mod fixture_keys;

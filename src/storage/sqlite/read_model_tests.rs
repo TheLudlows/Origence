@@ -5,6 +5,8 @@
 
 use super::read_model::{NativeHitKey, current_chunks, rows_by_ids};
 use super::*;
+#[cfg(test)]
+use crate::fixture_keys::FixtureKeys;
 use crate::storage::sqlite_db as db;
 
 // Test-only composition of the production read primitives. Session archives

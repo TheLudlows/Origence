@@ -323,20 +323,6 @@ pub trait RelationalStore {
     /// Privileged: resolve a bearer token to a principal+scope.
     async fn authenticate(&self, token: &str) -> StorageResult<AuthorizedScope>;
 
-    /// Privileged: create a named workspace (platform admin only).
-    async fn create_workspace(
-        &self,
-        tenant_id: Uuid,
-        workspace_id: Uuid,
-        name: &str,
-    ) -> StorageResult<()>;
-
-    /// Privileged: issue an API key for a workspace, returning it once.
-    async fn issue_key(&self, scope: Scope, role: &str) -> StorageResult<IssuedKey>;
-
-    /// Privileged: revoke a key by id.
-    async fn revoke_key(&self, key_id: Uuid) -> StorageResult<()>;
-
     /// Reconcile the cross-store ledger on startup/recovery: abandon stuck
     /// pending writes as orphan and requeue due retry_wait writes (A2.6).
     /// Returns counts as `{"requeued": n, "orphaned": n}`.

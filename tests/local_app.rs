@@ -1,4 +1,5 @@
 #![cfg(feature = "host")]
+use crate::fixture_keys::FixtureKeys;
 use axum::{Json, Router, extract::State};
 use origence::storage::sqlite_db as db;
 use origence::{models::Models, storage::*, types::*};
@@ -297,9 +298,9 @@ fn pdf() -> Vec<u8> {
 #[tokio::test]
 async fn local_host_http_mcp_models_and_recovery() {
     let dir = tempfile::tempdir().unwrap();
-    let bootstrap = crate::support::seed_workspace(dir.path(), "local tests", None).await;
+    let bootstrap = crate::support::seed_key_workspace(dir.path(), "local tests").await;
     let token = bootstrap["token"].as_str().unwrap();
-    let other = crate::support::seed_workspace(dir.path(), "other scope", None).await;
+    let other = crate::support::seed_key_workspace(dir.path(), "other scope").await;
     let slow = Arc::new(AtomicBool::new(false));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let model = format!("http://{}", listener.local_addr().unwrap());
@@ -553,26 +554,9 @@ async fn local_host_http_mcp_models_and_recovery() {
             .status(),
         404
     );
-    let reader = post(
-        &http,
-        &base,
-        token,
-        "/admin/keys",
-        json!({"workspace_id":bootstrap["workspace_id"],"role":"reader"}),
-    )
-    .await;
-    assert_eq!(
-        http.get(format!("{base}{source_path}"))
-            .bearer_auth(reader["token"].as_str().unwrap())
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        403
-    );
     let lookup = http
         .post(format!("{base}/v1/memories/lookup"))
-        .bearer_auth(reader["token"].as_str().unwrap())
+        .bearer_auth(token)
         .json(&identity)
         .send()
         .await
@@ -586,7 +570,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     let recalled = post(
         &http,
         &base,
-        reader["token"].as_str().unwrap(),
+        token,
         "/v1/search",
         json!({"query":shared_query,"mode":"keyword"}),
     )
@@ -613,7 +597,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     let context = post(
         &http,
         &base,
-        reader["token"].as_str().unwrap(),
+        token,
         "/v1/resolve",
         json!({"query":shared_query,"budget_tokens":3000}),
     )
@@ -681,7 +665,7 @@ async fn local_host_http_mcp_models_and_recovery() {
         let filtered = post(
             &http,
             &base,
-            reader["token"].as_str().unwrap(),
+            token,
             "/v1/search",
             json!({"query":"发布","limit":1,"memory_identity":filter}),
         )
@@ -693,7 +677,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     let filtered_context = post(
         &http,
         &base,
-        reader["token"].as_str().unwrap(),
+        token,
         "/v1/resolve",
         json!({"query":"发布","mode":"hybrid","memory_identity":identity,"budget_tokens":3000}),
     )
@@ -989,41 +973,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     let retried = job(&http, &base, token, id(&pending, "job_id"), "completed").await;
     assert_eq!(retried["generation"], 3);
 
-    // Revoke the creator during model IO: the final write must use fresh permission.
     slow.store(true, Ordering::SeqCst);
-    let actor = post(
-        &http,
-        &base,
-        token,
-        "/admin/keys",
-        json!({"workspace_id":bootstrap["workspace_id"],"role":"writer"}),
-    )
-    .await;
-    let revoked=post(&http,&base,actor["token"].as_str().unwrap(),"/v1/memories",json!({"fact_key":"revoked","content":"Never publish revoked work","publish_if_authorized":true})).await;
-    job(&http, &base, token, id(&revoked, "job_id"), "processing").await;
-    request(
-        &http,
-        &base,
-        token,
-        reqwest::Method::DELETE,
-        &format!("/admin/keys/{}", actor["key_id"].as_str().unwrap()),
-        Value::Null,
-    )
-    .await;
-    let failed = job(&http, &base, token, id(&revoked, "job_id"), "failed").await;
-    assert_eq!(failed["error_code"], "FORBIDDEN");
-    assert_eq!(
-        http.get(format!(
-            "{base}/v1/assets/{}",
-            revoked["asset_id"].as_str().unwrap()
-        ))
-        .bearer_auth(token)
-        .send()
-        .await
-        .unwrap()
-        .status(),
-        404
-    );
     // Delete in flight: the persisted cancellation and tombstone block late results.
     let doomed = post(
         &http,
@@ -1083,19 +1033,10 @@ async fn local_host_http_mcp_models_and_recovery() {
     let recovered = job(&http, &base, token, id(&crashed, "job_id"), "completed").await;
     assert_eq!(recovered["result"]["version"], 1);
     // The running host exposes tools and reauthorizes each request.
-    let key = post(
-        &http,
-        &base,
-        token,
-        "/admin/keys",
-        json!({"workspace_id":bootstrap["workspace_id"],"role":"reader"}),
-    )
-    .await;
-    let reader = key["token"].as_str().unwrap();
     let peer = crate::mcp_http::Peer::at(format!("{base}/mcp"));
     let tools: Value = peer
         .post(json!({"jsonrpc":"2.0","id":1,"method":"tools/list"}))
-        .bearer_auth(reader)
+        .bearer_auth(token)
         .send()
         .await
         .unwrap()
@@ -1131,7 +1072,7 @@ async fn local_host_http_mcp_models_and_recovery() {
 
     let recalled = peer
         .call(
-            reader,
+            token,
             None,
             "context_search",
             json!({"query":"Atlas","mode":"hybrid"}),
@@ -1141,7 +1082,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     assert_eq!(recalled["graph"]["entities"].as_array().unwrap().len(), 2);
     let assembled = peer
         .call(
-            reader,
+            token,
             None,
             "context_resolve",
             json!({"query":"Atlas","mode":"hybrid","budget_tokens":12000}),
@@ -1160,7 +1101,7 @@ async fn local_host_http_mcp_models_and_recovery() {
         "routes":[{"route":"memory","limit":20,"max_bytes":32000},{"route":"knowledge","limit":20,"max_bytes":32000}]});
     let direct_bundle: Value = http
         .post(format!("{base}/v1/context"))
-        .bearer_auth(key["token"].as_str().unwrap())
+        .bearer_auth(token)
         .json(&context_request)
         .send()
         .await
@@ -1171,7 +1112,7 @@ async fn local_host_http_mcp_models_and_recovery() {
         .await
         .unwrap();
     let via_mcp = peer
-        .call(reader, None, "context_bundle", context_request.clone())
+        .call(token, None, "context_bundle", context_request.clone())
         .await
         .unwrap();
     assert_eq!(
@@ -1181,7 +1122,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     assert!(!via_mcp["items"].as_array().unwrap().is_empty());
     let get = json!({"asset_id":published["asset_id"]});
     let result = peer
-        .call(reader, None, "context_get", get.clone())
+        .call(token, None, "context_get", get.clone())
         .await
         .unwrap();
     assert!(
@@ -1190,21 +1131,29 @@ async fn local_host_http_mcp_models_and_recovery() {
             .unwrap()
             .contains("Release approval required")
     );
-    request(
+    let administrator = std::fs::read_to_string(dir.path().join("deployment-admin.key")).unwrap();
+    let workspace = bootstrap["workspace_id"].as_str().unwrap();
+    let replacement = post(
         &http,
         &base,
-        token,
-        reqwest::Method::DELETE,
-        &format!("/admin/keys/{}", key["key_id"].as_str().unwrap()),
-        Value::Null,
+        administrator.trim_end(),
+        &format!("/admin/deployment/workspaces/{workspace}/keys/rotate"),
+        json!({}),
     )
     .await;
+    let replacement = replacement["token"].as_str().unwrap();
     assert_eq!(
-        peer.call(reader, None, "context_get", get).await,
+        peer.call(replacement, None, "context_get", get.clone())
+            .await
+            .unwrap(),
+        result
+    );
+    assert_eq!(
+        peer.call(token, None, "context_get", get).await,
         Err(json!({"http_status":401}))
     );
     assert_eq!(
-        peer.call(reader, None, "context_bundle", context_request)
+        peer.call(token, None, "context_bundle", context_request)
             .await,
         Err(json!({"http_status":401}))
     );
@@ -1573,7 +1522,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         s.get(&a, id(&first, "asset_id"), None).await.unwrap()["version"],
         2
     );
-    let restore_key = s.issue_key(&a, "writer").await.unwrap();
+    let restore_key = crate::support::seed_member_key(&s, &a, "writer").await;
     let restore_writer = s
         .auth(restore_key["token"].as_str().unwrap())
         .await

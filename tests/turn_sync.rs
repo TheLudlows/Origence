@@ -1,4 +1,5 @@
 //! Exercise installed hook commands and the real private archive API with synthetic text.
+use crate::fixture_keys::FixtureKeys;
 use axum::{
     Json,
     body::{Body, to_bytes},
@@ -7,12 +8,7 @@ use axum::{
     middleware::{self, Next},
     response::{IntoResponse, Response},
 };
-use origence::{
-    client::HostClient,
-    error::AppError,
-    models::Models,
-    storage::{RelationalStore, Scope},
-};
+use origence::{client::HostClient, error::AppError, models::Models, storage::Scope};
 use reqwest::Method;
 use serde_json::{Value, json};
 use std::{

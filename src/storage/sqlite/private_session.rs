@@ -51,29 +51,6 @@ impl SqliteTx {
         }
         Ok(owner)
     }
-    /// Rotate one live credential, retaining its logical identity and all archives.
-    pub async fn rotate_scoped_key(&mut self, id: Uuid) -> StorageResult<IssuedKey> {
-        self.check_permission(Permission::WorkspaceAdmin).await?;
-        let old:Option<(Uuid,String)>=sqlite_db::query_as("SELECT logical_key_id,role FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT revoked")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        let (logical, role) = old.ok_or(StorageError::NotFound)?;
-        if role == "workspace" {
-            return Err(StorageError::Forbidden);
-        }
-        // A key may rotate itself only under this transaction's already-verified admin role.
-        let key_id = Uuid::new_v4();
-        let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-        sqlite_db::query("INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,created_at) VALUES(?,?,?,?,?,?,?)")
-            .bind(key_id).bind(logical).bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(hash(&token)).bind(role).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        self.revoke_scoped_key_inner(id).await?;
-        self.audit(
-            "key.rotate",
-            id,
-            json!({"replacement_key_id":key_id,"logical_key_id":logical}),
-        )
-        .await?;
-        Ok(IssuedKey { key_id, token })
-    }
 }
 
 impl SqliteTx {
@@ -123,16 +100,8 @@ mod tests {
             tenant_id: Uuid::new_v4(),
             workspace_id: Uuid::new_v4(),
         };
-        store
-            .create_workspace(scope.tenant_id, scope.workspace_id, "private")
-            .await
-            .unwrap();
-        let admin = store.issue_key(scope, "admin").await.unwrap();
-        let first = store.issue_key(scope, "writer").await.unwrap();
-        let other = store.issue_key(scope, "writer").await.unwrap();
+        let first = store.create_key_workspace(scope, "private").await.unwrap();
         let auth = store.authenticate(&first.token).await.unwrap();
-        let other_auth = store.authenticate(&other.token).await.unwrap();
-        let admin_auth = store.authenticate(&admin.token).await.unwrap();
         let mut tx = store.begin(auth.clone()).await.unwrap();
         let session = tx.private_session_id().await.unwrap();
         let logical = tx.private_key_id().await.unwrap();
@@ -150,18 +119,11 @@ mod tests {
             tenant_id: scope.tenant_id,
             workspace_id: Uuid::new_v4(),
         };
-        store
-            .create_workspace(foreign_scope.tenant_id, foreign_scope.workspace_id, "other")
+        let foreign = store
+            .create_key_workspace(foreign_scope, "other")
             .await
             .unwrap();
-        let foreign_key = store.issue_key(foreign_scope, "admin").await.unwrap();
-        let foreign_auth = store.authenticate(&foreign_key.token).await.unwrap();
-        let mut foreign_tx = store.begin(foreign_auth).await.unwrap();
-        assert!(matches!(
-            foreign_tx.require_turn_visible(session, turn.turn_id).await,
-            Err(StorageError::NotFound)
-        ));
-        foreign_tx.commit().await.unwrap();
+        let other_auth = store.authenticate(&foreign.token).await.unwrap();
         let mut forged = auth.clone();
         forged.scope = foreign_scope;
         assert!(matches!(
@@ -178,30 +140,25 @@ mod tests {
             tx.register_turn(session, &turn, "hash").await,
             Err(StorageError::NotFound)
         ));
-        assert!(matches!(
-            tx.event_content_inner(source, true).await,
-            Err(StorageError::NotFound)
-        ));
+        assert_eq!(tx.event_content_inner(source, true).await.unwrap(), None);
         assert!(matches!(
             tx.event_file_inner(source).await,
             Err(StorageError::NotFound)
         ));
-        assert!(matches!(
-            tx.retract_event_inner(source).await,
-            Err(StorageError::NotFound)
-        ));
-        assert!(matches!(
-            tx.rotate_scoped_key(first.key_id).await,
-            Err(StorageError::Forbidden)
-        ));
+        assert_eq!(tx.retract_event_inner(source).await.unwrap(), 0);
         tx.commit().await.unwrap();
+        let admin = store.rotate_deployment_admin().await.unwrap();
+        let admin_auth = store
+            .authorize_deployment_workspace(&admin, scope.workspace_id)
+            .await
+            .unwrap();
         let mut tx = store.begin(admin_auth).await.unwrap();
         assert!(matches!(
             tx.require_private_session(session).await,
-            Err(StorageError::NotFound)
+            Err(StorageError::Forbidden)
         ));
-        let replacement = tx.rotate_scoped_key(first.key_id).await.unwrap();
-        tx.commit().await.unwrap();
+        tx.rollback().await.unwrap();
+        let replacement = store.rotate_workspace_key(scope).await.unwrap();
         assert!(store.authenticate(&first.token).await.is_err());
         assert!(matches!(
             store.begin(auth.clone()).await,
@@ -213,21 +170,9 @@ mod tests {
         assert_eq!(session, tx.private_session_id().await.unwrap());
         assert!(tx.require_turn_visible(session, turn.turn_id).await.is_ok());
         tx.commit().await.unwrap();
-        let mut tx = store
-            .begin(store.authenticate(&admin.token).await.unwrap())
-            .await
-            .unwrap();
-        let admin_session = tx.private_session_id().await.unwrap();
-        let rotated_admin = tx.rotate_scoped_key(admin.key_id).await.unwrap();
-        tx.commit().await.unwrap();
-        assert!(store.authenticate(&admin.token).await.is_err());
-        let mut tx = store
-            .begin(store.authenticate(&rotated_admin.token).await.unwrap())
-            .await
-            .unwrap();
-        assert_eq!(tx.private_session_id().await.unwrap(), admin_session);
-        tx.revoke_scoped_key(replacement.key_id).await.unwrap();
-        tx.commit().await.unwrap();
-        assert!(store.authenticate(&replacement.token).await.is_err());
+        assert_eq!(
+            store.authenticate(&foreign.token).await.unwrap().scope,
+            foreign_scope
+        );
     }
 }

@@ -1,9 +1,10 @@
 //! Public HTTP/worker/SQLite checks; the protocol peer is not the real engine.
+use crate::fixture_keys::FixtureKeys;
 use crate::support::{fixture, open_service};
 use origence::{
     client::HostClient,
     models::Models,
-    storage::{RelationalStore, Scope, sqlite_db as db},
+    storage::{Scope, sqlite_db as db},
     worker,
 };
 use reqwest::{Method, StatusCode};
@@ -500,13 +501,10 @@ async fn run_diagnostics_are_private_durable_and_replay_original_evidence() {
             .await,
         Err(origence::error::AppError::NotFound)
     ));
-    admin
-        .call(
-            Method::DELETE,
-            &format!("/admin/keys/{}", owner.key_id),
-            None,
-            None,
-        )
+    reopened
+        .engine
+        .relational()
+        .revoke_key(owner.key_id)
         .await
         .unwrap();
     assert!(matches!(

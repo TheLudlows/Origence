@@ -1,10 +1,7 @@
 //! Run and private archive contracts over HTTP MCP with synthetic credentials.
+use crate::fixture_keys::FixtureKeys;
 use crate::support::{fixture, open_service};
-use origence::{
-    client::HostClient,
-    models::Models,
-    storage::{RelationalStore, Scope},
-};
+use origence::{client::HostClient, models::Models, storage::Scope};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -34,13 +31,19 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
     };
-    store
-        .create_workspace(scope.tenant_id, scope.workspace_id, "synthetic MCP")
+    let owner = store
+        .create_key_workspace(scope, "synthetic MCP")
         .await
         .unwrap();
-    let owner = store.issue_key(scope, "writer").await.unwrap();
-    let other = store.issue_key(scope, "writer").await.unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let other_scope = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    let other = store
+        .create_key_workspace(other_scope, "other MCP workspace")
+        .await
+        .unwrap();
+    let admin = store.rotate_deployment_admin().await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let app = origence::api::router(service.clone());
@@ -159,7 +162,7 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
             .await,
         Err(origence::error::AppError::NotFound)
     ));
-    for token in [&other.token, &admin.token] {
+    for token in [&other.token, &admin] {
         let outsider = HostClient::new(&base, token.to_string()).unwrap();
         assert!(
             outsider
@@ -244,9 +247,15 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
             .unwrap()
             .is_empty()
     );
-    let workspace_admin = Peer::new(&base, &admin.token);
-    let admin_trace = workspace_admin
-        .call("context_run_get", read.clone())
+    let admin_client = HostClient::new(&base, admin.clone()).unwrap();
+    let workspace_path = format!("/admin/deployment/workspaces/{}", scope.workspace_id);
+    let admin_trace = admin_client
+        .call(
+            reqwest::Method::GET,
+            &format!("{workspace_path}/runs/{run}?limit=100"),
+            None,
+            None,
+        )
         .await
         .unwrap();
     assert_eq!(admin_trace["is_owner"], false);
@@ -257,7 +266,7 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
             .await
             .is_err()
     );
-    for token in [&other.token, &admin.token] {
+    for token in [&other.token, &admin] {
         let denied = Peer::new(&base, token);
         assert!(
             denied
@@ -274,14 +283,14 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
                 .await
                 .is_err()
         );
-        assert!(
-            denied
-                .call("context_run_create", create.clone())
-                .await
-                .is_err()
-        );
         assert!(denied.call("context_run_report",json!({"run_id":run,"report":{"event_id":Uuid::new_v4(),"reporter":"test","observed_at_ms":0,"event":{"kind":"result_reported","outcome":"unknown","summary":"denied"}}})).await.is_err());
     }
+    assert!(
+        Peer::new(&base, &admin)
+            .call("context_run_create", create.clone())
+            .await
+            .is_err()
+    );
     // Every declared client event retains its exact payload and report attribution.
     for event in [
         json!({"kind":"context_reported","references":[]}),
@@ -385,11 +394,10 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
         trace.to_string().contains("context_preparation_failed"),
         "{trace}"
     );
-    let admin_client = HostClient::new(&base, admin.token).unwrap();
     let rotated = admin_client
         .call(
             reqwest::Method::POST,
-            &format!("/admin/keys/{}/rotate", owner.key_id),
+            &format!("{workspace_path}/keys/rotate"),
             None,
             None,
         )
@@ -428,7 +436,7 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
     admin_client
         .call(
             reqwest::Method::DELETE,
-            &format!("/v1/assets/{asset}"),
+            &format!("{workspace_path}/assets/{asset}"),
             None,
             Some("synthetic-withdraw"),
         )
@@ -448,8 +456,8 @@ async fn mcp_runs_private_retry_rotation_and_unknown() {
     );
     admin_client
         .call(
-            reqwest::Method::DELETE,
-            &format!("/admin/keys/{}", rotated["key_id"].as_str().unwrap()),
+            reqwest::Method::POST,
+            &format!("{workspace_path}/keys/rotate"),
             None,
             None,
         )
@@ -736,13 +744,19 @@ async fn mcp_runs_reuse_explicit_node_hook_identity_and_enforce_credentials() {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
     };
-    store
-        .create_workspace(scope.tenant_id, scope.workspace_id, "hook fixture")
+    let writer = store
+        .create_key_workspace(scope, "hook fixture")
         .await
         .unwrap();
-    let writer = store.issue_key(scope, "writer").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
+    let foreign_scope = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    let foreign = store
+        .create_key_workspace(foreign_scope, "other hook workspace")
+        .await
+        .unwrap();
+    let admin = store.rotate_deployment_admin().await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let hold = Arc::new(AtomicBool::new(true));
@@ -843,8 +857,17 @@ async fn mcp_runs_reuse_explicit_node_hook_identity_and_enforce_credentials() {
     assert_eq!(trace["events"].as_array().unwrap().len(), 2);
     assert_eq!(trace["unreported_activity"], "unknown");
 
-    let admin_client = HostClient::new(&base, admin.token).unwrap();
-    let admin_trace = admin_client.run_trace(claude, 0, 50).await.unwrap();
+    let admin_client = HostClient::new(&base, admin).unwrap();
+    let workspace_path = format!("/admin/deployment/workspaces/{}", scope.workspace_id);
+    let admin_trace = admin_client
+        .call(
+            Method::GET,
+            &format!("{workspace_path}/runs/{claude}"),
+            None,
+            None,
+        )
+        .await
+        .unwrap();
     assert_eq!(admin_trace["is_owner"], false);
     assert_eq!(admin_trace["events"].as_array().unwrap().len(), 2);
 
@@ -853,7 +876,7 @@ async fn mcp_runs_reuse_explicit_node_hook_identity_and_enforce_credentials() {
             "claude-code",
             claude_start,
             &base,
-            &reader.token,
+            &foreign.token,
             Some(scope.workspace_id),
             true,
         )
@@ -879,7 +902,7 @@ async fn mcp_runs_reuse_explicit_node_hook_identity_and_enforce_credentials() {
     let replacement = admin_client
         .call(
             Method::POST,
-            &format!("/admin/keys/{}/rotate", writer.key_id),
+            &format!("{workspace_path}/keys/rotate"),
             None,
             None,
         )

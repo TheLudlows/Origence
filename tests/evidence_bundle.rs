@@ -1,15 +1,11 @@
 #![cfg(feature = "host")]
 
+use crate::fixture_keys::FixtureKeys;
 use axum::{Json, Router, extract::State, routing::post};
 use origence::storage::sqlite_db as db;
 use origence::{
-    error::AppError,
-    evidence::EvidenceInput,
-    models::Models,
-    service::Service,
-    storage::{RelationalStore, Scope},
-    types::AuthContext,
-    worker,
+    error::AppError, evidence::EvidenceInput, models::Models, service::Service, storage::Scope,
+    types::AuthContext, worker,
 };
 use serde_json::{Value, json};
 use std::{
@@ -490,10 +486,10 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
     let (a, token) = provision(&s, None).await;
     let (neighbor, _) = provision(&s, Some(a.tenant_id)).await;
     let (foreign, _) = provision(&s, None).await;
-    let reader_key = s.issue_key(&a, "reader").await.unwrap();
+    let reader_key = crate::support::seed_member_key(&s, &a, "reader").await;
     let reader_token = reader_key["token"].as_str().unwrap();
     let reader = s.auth(reader_token).await.unwrap();
-    let writer_key = s.issue_key(&a, "writer").await.unwrap();
+    let writer_key = crate::support::seed_member_key(&s, &a, "writer").await;
     let writer = s.auth(writer_key["token"].as_str().unwrap()).await.unwrap();
     memory(&s, &a, "scope", "Scopeneedle public workspace memory").await;
     let session = id(&s.private_session(&a).await.unwrap(), "session_id");
@@ -578,7 +574,7 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
             .await,
         Err(AppError::Forbidden)
     ));
-    s.revoke_key(&a, reader.id).await.unwrap();
+    s.engine.relational().revoke_key(reader.id).await.unwrap();
     assert!(matches!(
         s.evidence_bundle(
             &reader,
@@ -641,7 +637,7 @@ async fn evidence_session_index_finds_older_matches_and_enforces_private_scope()
     assert_eq!(accounting(&bounded, "session")["scan_exhausted"], false);
     // Filtering a different key's session never bypasses private ownership,
     // even when its turn would otherwise match the query.
-    let key = s.issue_key(&a, "writer").await.unwrap();
+    let key = crate::support::seed_member_key(&s, &a, "writer").await;
     let other = s.auth(key["token"].as_str().unwrap()).await.unwrap();
     let other_session = id(&s.private_session(&other).await.unwrap(), "session_id");
     archive(
@@ -1054,7 +1050,7 @@ async fn evidence_session_citations_use_the_full_session_and_turn_identity() {
         .unwrap();
     let (a, _) = provision(&s, None).await;
     let turn = Uuid::new_v4();
-    let key = s.issue_key(&a, "writer").await.unwrap();
+    let key = crate::support::seed_member_key(&s, &a, "writer").await;
     let other = s.auth(key["token"].as_str().unwrap()).await.unwrap();
     let mut citations = BTreeSet::new();
     for actor in [&a, &other] {
@@ -1150,7 +1146,7 @@ async fn evidence_embeds_once_and_rechecks_visibility_and_keys_after_external_io
     )
     .await;
     let surviving = knowledge(&s, &a, "Guardneedle independently supported document").await;
-    let reader_key = s.issue_key(&a, "reader").await.unwrap();
+    let reader_key = crate::support::seed_member_key(&s, &a, "reader").await;
     let reader = s.auth(reader_key["token"].as_str().unwrap()).await.unwrap();
     let mut input = request("Guardneedle", &["memory", "knowledge", "learning"]);
     input["mode"] = json!("hybrid");
@@ -1225,7 +1221,7 @@ async fn evidence_embeds_once_and_rechecks_visibility_and_keys_after_external_io
     tokio::time::timeout(Duration::from_secs(15), gate.entered.notified())
         .await
         .expect("second query did not reach the embedding barrier");
-    s.revoke_key(&a, reader.id).await.unwrap();
+    s.engine.relational().revoke_key(reader.id).await.unwrap();
     gate.release.notify_one();
     let denied = tokio::time::timeout(Duration::from_secs(15), pending)
         .await

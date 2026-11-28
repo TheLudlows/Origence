@@ -1,5 +1,7 @@
 //! SQLite holds session coordination and used dependency proofs.
 use super::*;
+#[cfg(all(test, feature = "host"))]
+use crate::fixture_keys::FixtureKeys;
 
 pub(super) const SCHEMA: &str = include_str!("../native-archive-schema.sql");
 

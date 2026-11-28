@@ -2,6 +2,7 @@
 //! events, memory/knowledge assets, versions, chunks, summaries, files and jobs
 //! — against a real database file in a temp dir.
 
+use crate::fixture_keys::FixtureKeys;
 use origence::storage::{
     AuthorizedScope, DomainTx, IssuedKey, Permission, RelationalStore, Scope, StorageError,
     WorkItem, sqlite::SqliteStore,

@@ -1,5 +1,6 @@
 #![cfg(feature = "host")]
 
+use crate::fixture_keys::FixtureKeys;
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use origence::storage::sqlite_db as db;
 use origence::{
@@ -291,7 +292,7 @@ async fn provision_scope(
 }
 
 async fn role(s: &Service, a: &AuthContext, role: &str) -> AuthContext {
-    let key = s.issue_key(a, role).await.unwrap();
+    let key = crate::support::seed_member_key(s, a, role).await;
     s.auth(key["token"].as_str().unwrap()).await.unwrap()
 }
 
@@ -405,10 +406,10 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
         .await
         .unwrap();
     let (admin, _) = provision(&s).await;
-    let writer_key = s.issue_key(&admin, "writer").await.unwrap();
+    let writer_key = crate::support::seed_member_key(&s, &admin, "writer").await;
     let writer_token = writer_key["token"].as_str().unwrap();
     let writer = s.auth(writer_token).await.unwrap();
-    let reader_key = s.issue_key(&admin, "reader").await.unwrap();
+    let reader_key = crate::support::seed_member_key(&s, &admin, "reader").await;
     let reader_token = reader_key["token"].as_str().unwrap();
     let reader = s.auth(reader_token).await.unwrap();
     let (other, _) = provision_scope(&s, admin.tenant_id, Uuid::new_v4()).await;
@@ -1163,7 +1164,7 @@ async fn learning_bounded_feedback_uses_sequence_not_time_or_bare_feedback_id() 
     let shared_id = Uuid::new_v4();
     feedback(&s, &original, &first, shared_id).await;
     // Authorized rotation changes principal ID, not private-session ownership.
-    let rotated = s.rotate_key(&a, original.id).await.unwrap();
+    let rotated = crate::support::rotate_fixture_key(&s, &a, original.id).await;
     let writer = s.auth(rotated["token"].as_str().unwrap()).await.unwrap();
     assert_eq!(
         id(&s.private_session(&writer).await.unwrap(), "session_id"),
@@ -1967,7 +1968,7 @@ async fn learning_request_scope_validation_and_live_permissions_are_enforced() {
         s.learning(&writer, id(&learned, "learning_id")).await,
         Err(AppError::NotFound)
     ));
-    s.revoke_key(&a, writer.id).await.unwrap();
+    s.engine.relational().revoke_key(writer.id).await.unwrap();
     assert!(matches!(
         s.learning(&writer, id(&learned, "learning_id")).await,
         Err(AppError::Forbidden)
@@ -2931,7 +2932,7 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
     let turn = archive(&s, &owner, session, vec![evidence(&hits["hits"][0])]).await;
     feedback(&s, &owner, &turn, Uuid::new_v4()).await;
     let learning = learn(&s, &owner, session).await;
-    let writer = s.issue_key(&owner, "writer").await.unwrap();
+    let writer = crate::support::seed_member_key(&s, &owner, "writer").await;
     let administrator = s
         .engine
         .relational()

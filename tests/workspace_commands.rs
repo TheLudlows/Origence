@@ -1,5 +1,6 @@
 //! Generic workspace ownership, live key capability and command-domain tests.
 //! These deliberately use no external protocol DTOs, mappings or routes.
+use crate::fixture_keys::FixtureKeys;
 use origence::storage::sqlite_db as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, JobQueue, RelationalStore, Scope, StorageError, WorkItem,
@@ -27,9 +28,7 @@ async fn issue(
     admin: &AuthorizedScope,
     role: &str,
 ) -> (AuthorizedScope, String) {
-    let mut tx = store.begin(admin.clone()).await.unwrap();
-    let key = tx.issue_scoped_key(role).await.unwrap();
-    tx.commit().await.unwrap();
+    let key = store.issue_key(admin.scope, role).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
     (auth, key.token)
 }
@@ -237,10 +236,7 @@ mod retry_tests {
             .execute(store.pool())
             .await
             .unwrap();
-        service
-            .revoke_key(&admin, creator.principal_id)
-            .await
-            .unwrap();
+        store.revoke_key(creator.principal_id).await.unwrap();
         assert!(matches!(
             service.get(&admin, asset, None).await,
             Err(AppError::NotFound)

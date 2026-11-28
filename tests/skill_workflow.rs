@@ -566,3 +566,6 @@ async fn single_workspace_key_submits_and_only_administrator_decides() {
     host.abort();
     service.engine.shutdown().await.unwrap();
 }
+
+#[path = "support/fixture_keys.rs"]
+mod fixture_keys;

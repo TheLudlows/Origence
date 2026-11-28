@@ -60,8 +60,10 @@ async function checkDenied(page, path, navigate) {
 
 async function main() {
   const { createUiServer } = await import("../dist/server.js");
-  const accounts = [["fixture-owner", fixture.owner], ["fixture-reviewer", fixture.other]]
-    .map(([username, key]) => ({ username, key, workspaceId: fixture.workspace }));
+  const accounts = [
+    { username: "fixture-owner", key: fixture.owner, workspaceId: fixture.workspace },
+    { username: "fixture-reviewer", key: fixture.other, workspaceId: fixture.otherWorkspace },
+  ];
   const server = createFixtureUiServer(createUiServer, { apiBaseUrl: fixture.api, accounts });
   let browser;
   try {

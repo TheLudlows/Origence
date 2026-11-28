@@ -1,17 +1,6 @@
 //! Provisioning for workspaces with one credential and one stable identity.
 use super::*;
 
-pub(super) async fn has_workspace_key(conn: &mut Connection, scope: Scope) -> StorageResult<bool> {
-    sqlite_db::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND role='workspace')",
-    )
-    .bind(scope.tenant_id)
-    .bind(scope.workspace_id)
-    .fetch_one(conn)
-    .await
-    .map_err(sqlite_err)
-}
-
 /// Jobs submitted with a single workspace key finish under its current
 /// credential. Member keys keep their original authority during transition.
 #[cfg(feature = "host")]

@@ -1,4 +1,5 @@
 //! Structured identity persistence and legacy compatibility.
+use crate::fixture_keys::FixtureKeys;
 use origence::memory_identity::{MemoryIdentity, MemorySubject, SubjectKind};
 use origence::storage::sqlite_db as db;
 use origence::storage::{

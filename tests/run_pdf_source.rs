@@ -1,10 +1,7 @@
 //! Public Service and HTTP coverage using fresh local stores and synthetic PDFs.
+use crate::fixture_keys::FixtureKeys;
 use crate::{pdf_fixture::text_pdf, support::open_service};
-use origence::{
-    models::Models,
-    storage::{RelationalStore, Scope},
-    worker,
-};
+use origence::{models::Models, storage::Scope, worker};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use uuid::Uuid;

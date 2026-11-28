@@ -1,3 +1,4 @@
+use crate::fixture_keys::FixtureKeys;
 mod support;
 
 use std::sync::{
@@ -12,7 +13,7 @@ use origence::{
     memory_identity::{MemoryIdentity, MemorySubject, SubjectKind},
     models::Models,
     service::Service,
-    storage::{JobQueue, RelationalStore, Scope, sqlite_db},
+    storage::{JobQueue, Scope, sqlite_db},
     types::{AuthContext, CaptureInput},
     worker,
 };
@@ -1087,7 +1088,9 @@ async fn write_authority_is_rechecked_before_pending_evidence_can_publish() {
         .respond(vec![fact(ORIGINAL, "境内", "100 元", Some("2026-01-01"))]);
     fixture
         .service
-        .revoke_key(&fixture.auth, writer.key_id)
+        .engine
+        .relational()
+        .revoke_key(writer.key_id)
         .await
         .unwrap();
     assert_eq!(settle(&fixture, &receipt).await["state"], "failed");
@@ -1103,3 +1106,6 @@ async fn write_authority_is_rechecked_before_pending_evidence_can_publish() {
         .unwrap();
     assert_eq!(retained["content"], ORIGINAL);
 }
+
+#[path = "support/fixture_keys.rs"]
+mod fixture_keys;

@@ -9,7 +9,6 @@ const { join } = require("node:path");
 const { setTimeout: sleep } = require("node:timers/promises");
 const { chromium } = require("playwright");
 const { seedWorkspace } = require("./browser-fixture-workspaces.cjs");
-const { createFixtureUiServer, fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 
 const bin = process.env.ORIGENCE_BIN ?? join(__dirname, "../../target/debug/origence");
 const predicate = "travel.hotel_cap";
@@ -48,9 +47,12 @@ const model = createServer(async (request, response) => {
   response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ facts: [fact] }) } }] }));
 });
 
-async function preview(page, origin, role, date) {
+async function preview(page, origin, token, date) {
   await page.goto(`${origin}/#contexts`);
-  await fixtureSignIn(page, role, "mouse");
+  if (token) {
+    await page.getByLabel("访问 Key", { exact: true }).fill(token);
+    await page.getByRole("button", { name: "使用 Key 登录", exact: true }).click();
+  }
   await page.getByLabel("任务与查询").fill("云舟境内酒店报销上限是多少？");
   await page.getByLabel("记忆业务日期（UTC）").fill(date);
   await page.getByRole("button", { name: "预览上下文" }).click();
@@ -67,7 +69,7 @@ async function preview(page, origin, role, date) {
     const modelOrigin = await listen(model);
     const apiOrigin = await listen(reservation);
     await new Promise((resolve) => reservation.close(resolve));
-    const writer = seedWorkspace(dir, "synthetic policy fixture");
+    const writer = seedWorkspace(dir, "synthetic policy fixture", undefined, true);
     host = spawn(bin, ["--data-dir", dir, "serve", "--local", "--bind", new URL(apiOrigin).host], {
       env: { ...process.env, OC_ENABLE_MODELS: "true", OC_EMBEDDING_MODEL: "", OC_EXTRACTION_BASE_URL: modelOrigin, OC_EXTRACTION_MODEL: "fixture", OC_MODEL_API_KEY: "fixture", RUST_LOG: "warn" },
       stdio: ["ignore", "ignore", "inherit"],
@@ -82,9 +84,6 @@ async function preview(page, origin, role, date) {
       headers: { Authorization: `Bearer ${writer.token}`, "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key } : {}) },
       body: body && JSON.stringify(body),
     });
-    const issued = await api("/admin/keys", { workspace_id: writer.workspace_id, role: "reader" });
-    assert.equal(issued.status, 200);
-    const reader = await issued.json();
     assert.equal((await api("/admin/memory-properties", { predicate, cardinality: "single", required_context: ["region"] }, "property")).status, 200);
     const retain = async (content, key) => {
       const response = await api("/v1/memories/retain", { content }, key);
@@ -101,13 +100,11 @@ async function preview(page, origin, role, date) {
     const futureId = await retain(futureSource, "future");
 
     const { createUiServer } = await import("../dist/server.js");
-    const accounts = fixtureAccounts(writer.workspace_id, [writer.token, reader.token]);
-    [accounts[0].username, accounts[1].username] = ["fixture-writer", "fixture-reader"];
-    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: apiOrigin, accounts });
+    relay = createUiServer({ apiBaseUrl: apiOrigin });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     const writerPage = await browser.newPage();
-    const writerMemory = await preview(writerPage, origin, "writer", "2026-11-30");
+    const writerMemory = await preview(writerPage, origin, writer.token, "2026-11-30");
     await writerMemory.getByText("2026-11-30 的结论 · 100 元", { exact: true }).waitFor();
     const future = writerMemory.locator(".citation").filter({ hasText: futureId });
     const openOriginal = future.getByRole("button", { name: "打开原文" });
@@ -116,25 +113,17 @@ async function preview(page, origin, role, date) {
     assert.equal(await future.locator("mark").textContent(), futureSource.slice(prefix.length));
     assert.equal(await future.locator("mark").evaluate((mark) => mark.parentElement.textContent), futureSource);
 
-    const readerPage = await browser.newPage();
-    const readerMemory = await preview(readerPage, origin, "reader", "2026-12-01");
-    await readerMemory.getByText("2026-12-01 的结论 · 80 元", { exact: true }).waitFor();
-    assert.equal(await readerMemory.getByRole("button", { name: "打开原文" }).count(), 0);
-    const readerCitation = readerMemory.locator(".citation").filter({ hasText: futureId });
-    const verifyExcerpt = readerCitation.getByRole("button", { name: "核验引文" });
-    await verifyExcerpt.click();
-    await readerCitation.locator("mark").waitFor();
-    assert.equal(await readerCitation.locator("mark").textContent(), futureSource.slice(prefix.length));
-    assert.equal(await readerCitation.getByText(prefix, { exact: false }).count(), 0);
-
+    const after = await preview(writerPage, origin, null, "2026-12-01");
+    await after.getByText("2026-12-01 的结论 · 80 元", { exact: true }).waitFor();
+    const afterCitation = after.locator(".citation").filter({ hasText: futureId });
+    const reopen = afterCitation.getByRole("button", { name: "打开原文" });
+    await reopen.click();
+    await afterCitation.locator("mark").waitFor();
     assert.ok((await api(`/v1/events/${futureId}`, null, "withdraw-future", "DELETE")).ok);
-    await openOriginal.click();
-    await future.getByRole("status").filter({ hasText: "来源已删除或不可访问。" }).waitFor();
-    assert.equal(await future.locator("mark").count(), 0);
-    await verifyExcerpt.click();
-    await readerCitation.getByRole("status").filter({ hasText: "无法核验引文" }).waitFor();
-    assert.equal(await readerCitation.locator("mark").count(), 0);
-    console.log("PASS: dated console answers, original UTF-8 source opening, reader excerpt, and withdrawal on reopen");
+    await reopen.click();
+    await afterCitation.getByRole("status").filter({ hasText: "来源已删除或不可访问。" }).waitFor();
+    assert.equal(await afterCitation.locator("mark").count(), 0);
+    console.log("PASS: dated console answers, original UTF-8 source opening, and withdrawal on reopen");
   } finally {
     await browser?.close();
     relay?.closeAllConnections();

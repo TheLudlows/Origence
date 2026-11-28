@@ -1,4 +1,6 @@
 //! Local HTTP protocol tests plus opt-in separately provisioned real AnySeek contracts.
+#[cfg(all(feature = "sqlite", feature = "host"))]
+use crate::fixture_keys::FixtureKeys;
 #[cfg(feature = "host")]
 mod support;
 use origence::storage::{
@@ -354,7 +356,7 @@ async fn real_anyseek_rejects_missing_duplicate_and_changed_publication_identiti
 #[cfg(feature = "host")]
 mod service_contract {
     use super::*;
-    use origence::{models::Models, service::Service, storage::RelationalStore, worker};
+    use origence::{models::Models, service::Service, worker};
     use serde_json::{Value, json};
 
     async fn provision(service: &Service) -> (String, origence::types::AuthContext) {
@@ -1156,3 +1158,7 @@ async fn workspace_collections_are_automatic_isolated_and_never_repaired_after_l
         "missing committed collection must not be recreated"
     );
 }
+
+#[cfg(feature = "sqlite")]
+#[path = "support/fixture_keys.rs"]
+mod fixture_keys;

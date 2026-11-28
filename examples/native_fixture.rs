@@ -62,3 +62,6 @@ async fn run(fixture: Fixture) -> anyhow::Result<Value> {
         }
     }
 }
+
+#[path = "../tests/support/fixture_keys.rs"]
+mod fixture_keys;

@@ -1,9 +1,10 @@
 //! Stored bytes and retrieval indexes share one AnySeek chunk Record.
+use crate::fixture_keys::FixtureKeys;
 use origence::{
     error::AppError,
     models::Models,
     service::Service,
-    storage::{RelationalStore, Scope, sqlite_db as db},
+    storage::{Scope, sqlite_db as db},
     types::{AuthContext, MemoryInput, RestoreInput},
     worker,
 };

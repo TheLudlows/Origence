@@ -1,5 +1,6 @@
 //! Ledger type unit tests (M3): surface/state encoding and scoped lifecycle.
 
+use crate::fixture_keys::FixtureKeys;
 use origence::storage::ledger::{LedgerEntry, LedgerKey, LedgerState, Surface};
 use origence::storage::sqlite_db as db;
 use origence::storage::{

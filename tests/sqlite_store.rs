@@ -1,6 +1,7 @@
 //! SQLite adapter tests (M2): privileged ops, scoped transactions, idempotency
 //! and the self-polled queue against a real database file in a temp dir.
 
+use crate::fixture_keys::FixtureKeys;
 use origence::storage::sqlite_db as db;
 use origence::storage::{
     AuthorizedScope, DomainTx, IssuedKey, JobFinish, JobQueue, Lifecycle, Permission,
@@ -32,26 +33,27 @@ async fn provision(store: &SqliteStore, name: &str) -> Provisioned {
 }
 
 #[tokio::test]
-async fn key_roundtrip_and_revoke() {
+async fn workspace_key_roundtrip_and_rotation() {
     let dir = tempfile::tempdir().unwrap();
     let store = SqliteStore::open(dir.path().join("oc.db")).await.unwrap();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let key = store.create_key_workspace(scope, "acme").await.unwrap();
+    let auth = store.authenticate(&key.token).await.unwrap();
+    assert_eq!(auth.scope, scope);
+    assert_eq!(auth.role, "workspace");
+    assert_eq!(auth.principal_id, key.key_id);
 
-    let p = provision(&store, "acme").await;
-    assert_eq!(p.auth.scope, p.scope);
-    assert_eq!(p.auth.role, "admin");
-    assert_eq!(p.auth.principal_id, p.key.key_id);
-
-    store.revoke_key(p.key.key_id).await.unwrap();
+    let replacement = store.rotate_workspace_key(scope).await.unwrap();
     assert!(matches!(
-        store.authenticate(&p.key.token).await,
+        store.authenticate(&key.token).await,
         Err(StorageError::Forbidden)
     ));
-
-    // Unknown roles are rejected at issue time.
-    assert!(matches!(
-        store.issue_key(p.scope, "superuser").await,
-        Err(StorageError::Conflict(_))
-    ));
+    let next = store.authenticate(&replacement.token).await.unwrap();
+    assert_eq!(next.scope, scope);
+    assert_eq!(next.principal_id, replacement.key_id);
 }
 
 #[tokio::test]
