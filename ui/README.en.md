@@ -56,7 +56,7 @@ An eight-hour in-memory console session survives page reloads. The browser recei
 
 ### Create a child workspace
 
-In an existing membership-based workspace, sign in as the root workspace admin, select the root, and use **新建工作区** to enter a name. The console refreshes the list and switches to the new workspace, where the creator has writer access. Ordinary administrators access other children through explicit grants. Trusted root credentials with `allow_owned_workspaces` can access all immediate children. Operators initialize new root workspaces offline.
+In an existing membership-based workspace, sign in as the root workspace admin, select the root, and use **新建工作区** to enter a name. The console switches to the new workspace, where the creator's key has an admin grant and can issue credentials from **API Key** in the sidebar. Existing children retain their current grants. Trusted root credentials with `allow_owned_workspaces` can access all immediate children using their explicit or derived role. Operators initialize new root workspaces offline.
 
 After making development changes, run `npm run build`. `npm run dev` watches build output and restarts the service. The server also accepts `--host` and `--port` to work with existing preview tools.
 
@@ -65,7 +65,8 @@ After making development changes, run `npm run build`. `npm run dev` watches bui
 In an existing membership-based workspace, sign in as an administrator, select the workspace, and open **API Key** in the sidebar. The page lists
 credentials issued there and lets administrators create them, change roles, rotate, or revoke them.
 To grant access using a key issued in another workspace in the same tenant, enter its logical key ID
-in the target workspace. Removing an additional grant removes access to that workspace. Rotation
+in the target workspace. Removing an additional grant affects only that workspace. A root key with
+derived access falls back to its derived role. Rotation
 immediately invalidates the old token and keeps the logical key ID and its grants.
 
 Copy the new token from the creation or rotation dialog. To obtain another token after leaving the

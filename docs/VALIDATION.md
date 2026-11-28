@@ -7,6 +7,19 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 新建子工作区后签发 Key
+
+基于 main `eb37e8f`，在 Linux、Rust 1.98.0 和新建合成库上，
+`cargo test --locked --test local owned_workspaces` 通过 16 项，
+`cargo test --locked --test local workspace_access` 通过 5 项。
+覆盖创建者的显式 admin 授权、其他凭据的作用域、分页角色读取、降权后的重试及移除显式授权后恢复派生角色。
+SQL 仍在同一事务逐表读取，仅按当前页的工作区 ID 批量读取明确授权。
+格式检查、全特性和仅 SQLite 的全目标严格 Clippy 均通过。
+
+Node 类型检查和 34 项 UI 测试通过。Chromium 156.0.8078.79 使用真实本地 Origence 和临时库，
+验证账号登录、创建子工作区、自动切换、签发 reader Key 及通过 `/v1/whoami` 核对目标工作区。
+另复跑了使用合成 HTTP 的控制台会话回归。未运行 Windows 验证。
+
 ## 2026-11-28 · 控制台登录切换与浅色样式
 
 基于 main `91479ea`，Linux 上的 Node 24.22.1 通过 `npm --prefix ui run check` 和 34 项 UI 测试。

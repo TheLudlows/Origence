@@ -4,6 +4,21 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Issuing keys after creating a child workspace
+
+Based on main `eb37e8f`, on Linux with Rust 1.98.0 and fresh synthetic databases,
+`cargo test --locked --test local owned_workspaces` passed 16 tests and
+`cargo test --locked --test local workspace_access` passed five. The tests covered the
+creator's explicit admin grant, credential isolation, paginated effective roles, replay after
+demotion, and the derived role after removing the explicit grant. Reads use separate tables
+in one transaction and batch explicit grants only for the current page.
+Formatting and strict all-target Clippy passed with all features and with SQLite only.
+
+Node type checking and 34 UI tests passed. Chromium 156.0.8078.79 against local Origence and a
+temporary database verified account login, child creation, automatic workspace switching, reader
+key issuance, and scope confirmation through `/v1/whoami`. The synthetic HTTP console session
+regression also passed. Windows was not exercised.
+
 ## 2026-11-28 · Console sign-in switch and lighter styling
 
 Based on main `91479ea`, Node 24.22.1 on Linux passed `npm --prefix ui run check` and 34 UI tests.

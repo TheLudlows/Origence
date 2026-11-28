@@ -387,8 +387,8 @@ memories/identified 和 captures/identified 可选 expected_version（非负整�
 
 - 两个接口均要求调用方在当前根工作区拥有 `admin` 角色，包括通过显式工作区授权获得该角色的 Key。子工作区层级为一层。
 - `GET /v1/workspaces/owned?limit=50&after=<UUID>` 以 `items` 和 `next_after` 列出当前根工作区下该 Key 可访问的直接子工作区。每项包含 `workspace_id`、`name` 和有效 `role`。`limit` 范围 1–100。
-- `PUT /v1/workspaces/owned/{id}` 接收 `{name}` 并返回 `{workspace_id}`。普通管理员创建时，同一事务为其逻辑 Key 添加新子工作区的 `writer` 授权。重复使用同一 UUID 时，有权访问该子工作区的调用方可读回回执，已有名称和授权保持原值。UUID 已关联不同父工作区时返回冲突。
-- `allow_owned_workspaces` 继续控制受信根凭据对子工作区的派生访问。业务请求使用 `X-Origence-Workspace` 时先检查显式授权。具有派生能力的受信根凭据也可选择已存在的直接子工作区，以派生的 reader 或 writer 身份访问。目标不在该派生范围时返回 404。子工作区的记录按作用域和逻辑 key 隔离。
+- `PUT /v1/workspaces/owned/{id}` 接收 `{name}` 并返回 `{workspace_id}`。首次创建时，同一事务为创建者的逻辑 Key 添加新子工作区的 `admin` 授权，允许在该空间签发和管理凭据。重复使用同一 UUID 时，有权访问该子工作区的调用方可读回回执，已有名称和授权保持原值。UUID 已关联不同父工作区时返回冲突。
+- `allow_owned_workspaces` 继续控制受信根凭据对子工作区的派生访问。业务请求使用 `X-Origence-Workspace` 时先检查显式授权。有派生能力的根 Key 若已有显式授权，子工作区管理员可以调整或撤销该授权。撤销后，凭据恢复派生的 reader 或 writer 权限。目标不在该派生范围时返回 404。子工作区的记录按作用域和逻辑 Key 隔离。
 
 ## 通用所属 workspace 与消息批次库接口
 

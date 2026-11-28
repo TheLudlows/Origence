@@ -28,7 +28,7 @@ async function listen(server) {
 async function run() {
   const { createUiServer } = await import("../dist/server.js");
   const { hashConsolePassword } = await import("../dist/console-accounts.js");
-  const children = new Map([[existingChild, { workspace_id: existingChild, name: "已有子工作区" }]]);
+  const children = new Map([[existingChild, { workspace_id: existingChild, name: "已有子工作区", role: "writer" }]]);
   const creationAttempts = [];
   const knowledge = { asset_id: alpha, title: "共享运维手册", version: 1, kind: "knowledge",
     content: "发布版运维知识正文", source_event_id: excluded, content_hash: "a".repeat(64),
@@ -112,7 +112,7 @@ async function run() {
     if (path === "/v1/whoami")
       return send({ id: grant.workspaceId, workspace_id: grant.workspaceId, role: grant.workspaceId === alpha ? "admin" : "reader" });
     if (path === "/v1/workspaces/owned")
-      return grant.workspaceId === alpha ? send({ items: [...children.values()].map((child) => ({ ...child, role: "writer" })), next_after: null }) : send({}, 403);
+      return grant.workspaceId === alpha ? send({ items: [...children.values()], next_after: null }) : send({}, 403);
     if (req.method === "PUT" && path.startsWith("/v1/workspaces/owned/")) {
       if (grant.workspaceId !== alpha || req.headers["x-origence-workspace"]) return send({}, 403);
       const id = path.split("/").at(-1);
@@ -120,7 +120,7 @@ async function run() {
       for await (const part of req) parts.push(part);
       const { name } = JSON.parse(Buffer.concat(parts).toString());
       creationAttempts.push(id);
-      children.set(id, { workspace_id: id, name });
+      children.set(id, { workspace_id: id, name, role: "admin" });
       if (creationAttempts.length === 1) return send({ error: { message: "模拟提交回执丢失" } }, 502);
       return send({ workspace_id: id });
     }

@@ -255,7 +255,11 @@ impl SqliteTx {
             .execute(&mut *self.tx)
             .await
             .map_err(sqlite_err)?;
-        } else if owned_capability {
+        } else if owned_capability
+            && grant_role(&mut self.tx, self.scope, logical_id)
+                .await?
+                .is_none()
+        {
             return Err(StorageError::Forbidden);
         } else if let Some(role) = role {
             sqlite_db::query(

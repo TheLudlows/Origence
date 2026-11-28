@@ -319,8 +319,8 @@ Pass lookup's version to the write endpoint to cover the concurrency window betw
 
 - `GET /v1/workspaces/owned?limit=50&after=<UUID>` lists the root's immediate children as `items` and `next_after`. Each item includes `workspace_id` and `name`. The limit ranges from 1 to 100.
 - `PUT /v1/workspaces/owned/{id}` accepts `{name}` and returns `{workspace_id}`. Reusing the UUID reads back the existing child. A UUID already owned by a different workspace returns a conflict.
-- Both endpoints require a live `admin` role in the selected root, including an explicit workspace grant. The list returns only accessible direct children and includes each child's effective `role`. Creation grants the creator's logical key explicit `writer` access in the same transaction if the key has no derived access. A caller can replay the receipt for an accessible child without changing its name or grants.
-- `allow_owned_workspaces` controls derived access for trusted root credentials. Business requests using `X-Origence-Workspace` check explicit grants first. A trusted root credential with that capability can select an existing direct child with its derived reader or writer role. Targets outside that derived scope return 404. Records remain isolated by scope and logical key.
+- Both endpoints require a live `admin` role in the selected root, including an explicit workspace grant. The list returns only accessible direct children and includes each child's effective `role`. The creation transaction grants the creator's logical key explicit `admin` access to the new child, including credential management. A caller can replay the receipt for an accessible child without changing its name or grants.
+- `allow_owned_workspaces` controls derived access for trusted root credentials. Business requests using `X-Origence-Workspace` check explicit grants first. A child admin can change or remove an existing explicit grant for a derivation-capable root key. Removing the grant restores its derived reader or writer role. Targets outside that derived scope return 404. Records remain isolated by scope and logical key.
 
 ## Common owning workspace and message batch library APIs
 

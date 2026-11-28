@@ -547,7 +547,7 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         .unwrap();
     assert_eq!(
         first_page,
-        json!({"items":[{"workspace_id":child,"name":"试点","role":"writer"}],"next_after":child})
+        json!({"items":[{"workspace_id":child,"name":"试点","role":"admin"}],"next_after":child})
     );
     let last_page: Value = list(
         format!("/v1/workspaces/owned?limit=1&after={child}"),
@@ -562,7 +562,7 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
     .unwrap();
     assert_eq!(
         last_page,
-        json!({"items":[{"workspace_id":second,"name":"Second","role":"writer"}],"next_after":null})
+        json!({"items":[{"workspace_id":second,"name":"Second","role":"admin"}],"next_after":null})
     );
     let empty: Value = list("/v1/workspaces/owned".into(), &other_manager.token)
         .await
@@ -597,7 +597,7 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         .unwrap();
     assert_eq!(
         ordinary_page,
-        json!({"items":[{"workspace_id":ordinary_child,"name":"Ordinary child","role":"writer"}],"next_after":null})
+        json!({"items":[{"workspace_id":ordinary_child,"name":"Ordinary child","role":"admin"}],"next_after":null})
     );
     let creator: Value = call(Method::GET, "/v1/whoami", &ordinary.token)
         .header("X-Origence-Workspace", ordinary_child.to_string())
@@ -609,7 +609,41 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         .json()
         .await
         .unwrap();
-    assert_eq!(creator["role"], "writer");
+    assert_eq!(creator["role"], "admin");
+    let issue_reader = |token: &str, workspace: Uuid| {
+        call(Method::POST, "/admin/keys", token)
+            .header("X-Origence-Workspace", workspace.to_string())
+            .json(&json!({"workspace_id":workspace,"role":"reader"}))
+            .send()
+    };
+    assert_eq!(
+        issue_reader(&manager.token, ordinary_child)
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    for (key, workspace) in [(&ordinary, ordinary_child), (&manager, child)] {
+        let issued: Value = issue_reader(&key.token, workspace)
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let reader: Value = call(Method::GET, "/v1/whoami", issued["token"].as_str().unwrap())
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(reader["role"], "reader");
+        assert_eq!(reader["workspace_id"], json!(workspace));
+    }
     let delegated_child = Uuid::from_u128(400);
     let delegated = store.issue_key(root, "reader").await.unwrap();
     let delegated_root = Scope {
@@ -675,7 +709,7 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         .unwrap();
     assert_eq!(username["workspace_id"], json!(child));
     assert_eq!(username["id"], json!(manager.key_id));
-    assert_eq!(username["role"], "writer");
+    assert_eq!(username["role"], "admin");
     assert_eq!(
         scoped(Method::GET, "/v1/whoami", &ordinary.token)
             .send()
@@ -739,12 +773,7 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         StatusCode::NOT_FOUND
     );
     assert_eq!(
-        scoped(Method::POST, "/admin/keys", &manager.token)
-            .json(&json!({"workspace_id":child,"role":"admin"}))
-            .send()
-            .await
-            .unwrap()
-            .status(),
+        issue_reader(&ordinary.token, child).await.unwrap().status(),
         StatusCode::FORBIDDEN
     );
     assert_eq!(
@@ -784,6 +813,53 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         .unwrap()
         .error_for_status()
         .unwrap();
+    let manager_grant = format!("/admin/workspace-key-grants/{}", manager.key_id);
+    call(Method::PUT, &manager_grant, &child_admin.token)
+        .json(&json!({"role":"reader"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    call(Method::PUT, &path, &manager.token)
+        .json(&json!({"name":"Retry after demotion"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let demoted_page: Value = list("/v1/workspaces/owned?limit=1".into(), &manager.token)
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        demoted_page["items"][0],
+        json!({"workspace_id":child,"name":"试点","role":"reader"})
+    );
+    assert_eq!(
+        issue_reader(&manager.token, child).await.unwrap().status(),
+        StatusCode::FORBIDDEN
+    );
+    call(Method::DELETE, &manager_grant, &child_admin.token)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let derived: Value = scoped(Method::GET, "/v1/whoami", &manager.token)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(derived["role"], "writer");
     store.revoke_key(manager.key_id).await.unwrap();
     assert_eq!(
         scoped(Method::GET, &run_path, &manager.token)

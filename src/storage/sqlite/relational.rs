@@ -153,7 +153,7 @@ impl SqliteStore {
         let (logical_id, home, home_role, default_access, capable) =
             tx.managed_workspace_key().await?;
         let rows = if capable && home == tx.scope.workspace_id && default_access {
-            sqlite_db::query_as(
+            let mut children: Vec<(Uuid, String, String)> = sqlite_db::query_as(
                 "SELECT id,name,'writer' FROM oc_workspaces WHERE tenant_id=? AND owner_workspace_id=? \
                  AND id>? ORDER BY id LIMIT ?",
             )
@@ -163,7 +163,33 @@ impl SqliteStore {
             .bind(limit)
             .fetch_all(&mut *tx.tx)
             .await
-            .map_err(sqlite_err)?
+            .map_err(sqlite_err)?;
+            if !children.is_empty() {
+                // Explicit roles override derived access, including demotions.
+                let placeholders = vec!["?"; children.len()].join(",");
+                let sql = format!(
+                    "SELECT workspace_id,role FROM oc_workspace_key_grants
+                     WHERE tenant_id=? AND logical_key_id=? AND workspace_id IN ({placeholders})"
+                );
+                let mut query = sqlite_db::query_as(&sql)
+                    .bind(tx.scope.tenant_id)
+                    .bind(logical_id);
+                for (id, _, _) in &children {
+                    query = query.bind(*id);
+                }
+                let mut grants: HashMap<Uuid, String> = query
+                    .fetch_all(&mut *tx.tx)
+                    .await
+                    .map_err(sqlite_err)?
+                    .into_iter()
+                    .collect();
+                for (id, _, role) in &mut children {
+                    if let Some(grant) = grants.remove(id) {
+                        *role = grant;
+                    }
+                }
+            }
+            children
         } else {
             let mut grants = super::workspace_grants::additional_grants(
                 &mut tx.tx,
@@ -240,9 +266,8 @@ impl SqliteStore {
             #[cfg(feature = "local-storage")]
             OwnedWorkspaceAuthorization::Administrator => {
                 tx.require_root_workspace().await?;
-                let (logical_id, home, _, active, capable) = tx.managed_workspace_key().await?;
-                let derived = home == tx.scope.workspace_id && active && capable;
-                ("writer", (!derived).then_some(logical_id))
+                let (logical_id, _, _, _, _) = tx.managed_workspace_key().await?;
+                ("admin", Some(logical_id))
             }
             OwnedWorkspaceAuthorization::Capability(permission) => {
                 let root_role = tx.require_owned_workspace_root(permission).await?;
@@ -302,11 +327,12 @@ impl SqliteStore {
                     if let Some(logical_id) = explicit_key {
                         sqlite_db::query(
                             "INSERT INTO oc_workspace_key_grants(tenant_id,workspace_id,logical_key_id,role)
-                             VALUES(?,?,?,'writer')",
+                             VALUES(?,?,?,?)",
                         )
                         .bind(tx.scope.tenant_id)
                         .bind(workspace_id)
                         .bind(logical_id)
+                        .bind(role)
                         .execute(&mut *tx.tx)
                         .await
                         .map_err(sqlite_err)?;

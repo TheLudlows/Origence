@@ -145,12 +145,34 @@ async function run(binary) {
     await row(newIdentity.id).waitFor({ state: "detached" });
     assert.equal((await whoami(replacement)).status, 401);
 
+    await page.getByRole("button", { name: "新建工作区", exact: true }).click();
+    const child = open("新建工作区");
+    await child.getByLabel("工作区名称").fill("试点");
+    await child.getByRole("button", { name: "创建工作区", exact: true }).click();
+    await child.waitFor({ state: "detached" });
+    await workspace("试点").waitFor();
+    assert.equal(await workspace("试点").getAttribute("aria-current"), "true");
+    const childId = await page.evaluate(() => sessionStorage.getItem("origence.selectedWorkspace"));
+    assert.ok(childId && childId !== a.workspace_id && childId !== b.workspace_id);
+    assert.equal((await (await whoami(a.token, childId)).json()).role, "admin");
+    await nav.getByRole("button", { name: "API Key", exact: true }).click();
+    await page.getByRole("button", { name: "创建 API Key", exact: true }).click();
+    await create.getByLabel("权限").selectOption("reader");
+    await create.getByRole("button", { name: "创建", exact: true }).click();
+    await open("保存新 API Key").waitFor();
+    const childToken = await secret.inputValue();
+    secrets.push(childToken);
+    const childIdentity = await (await whoami(childToken)).json();
+    assert.equal(childIdentity.workspace_id, childId);
+    assert.equal(childIdentity.role, "reader");
+    await open("保存新 API Key").getByRole("button", { name: "关闭" }).click();
+
     await page.getByRole("button", { name: "退出", exact: true }).click();
     await login(page, "reader");
     await page.getByText("只有工作区管理员可以管理 API Key。", { exact: true }).waitFor();
     assert.equal(await nav.getByRole("button", { name: "API Key" }).count(), 0);
     assert.ok(secrets.every((value) => !stderr.includes(value)));
-    console.log("PASS Chromium and Origence: scoped key management, creation and rotation, one-time display, cross-workspace grants, revocation, reader denial");
+    console.log("PASS Chromium and Origence: scoped key management, child creation and key issuance, rotation, one-time display, cross-workspace grants, revocation, reader denial");
   } finally {
     await browser?.close();
     if (ui) { ui.closeAllConnections(); ui.close(); }
