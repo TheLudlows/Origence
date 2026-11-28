@@ -4,6 +4,20 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Administrator version restore and source withdrawal
+
+Verified `0de6327ac945bddd07bd7ab01d7772bcbea6df8f` on main base
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`, using Linux, Rust 1.98.0, Node 24.22.1, and isolated fresh stores.
+The targeted HTTP and Rust library case restored v1 as v3 and verified administrator attribution. Withdrawing the source
+blocked reads of v1 and v3, preserved v2 with its separate source, cancelled a queued restore, and rejected new restores
+of v1. It also checked original record retention, idempotent replay, stale version preconditions, workspace isolation,
+and the existing protections for original conversation turns.
+
+The full Rust suite passed 487 tests with eight configured skips. Formatting, strict all-target Clippy with all features
+and `sqlite` only, 34 UI tests, type checking, and the HTTP MCP smoke passed. Chromium 156.0.8078.79 used a real loopback
+service to check pinned versions, restore, source reads, and withdrawal as administrator. Console session and content tab
+regressions used synthetic fixtures. Native Windows and GitHub CI are pending.
+
 ## 2026-11-28 · Retire legacy console key management and child workspace discovery
 
 Verified `3eb7daf8b220430406c5300781c697002c28c97f` on main base
