@@ -224,6 +224,8 @@ struct Document {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     terms: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    summary_terms: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     profile: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     dimension: Option<String>,
@@ -469,7 +471,9 @@ impl AnySeekFullTextStore {
     /// Exact collection configuration for a fresh dedicated lexical projection.
     pub fn collection_config() -> Value {
         let mut schema: Vec<Value> = META.iter().map(|field| json!({"field":field,"field_type":"String","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0})).collect();
-        schema.push(json!({"field":"terms","field_type":"Text","store":true,"index_lexical":true,"index_vector":false,"filterable":false,"boost":1.0}));
+        for field in ["terms", "summary_terms"] {
+            schema.push(json!({"field":field,"field_type":"Text","store":true,"index_lexical":true,"index_vector":false,"filterable":false,"boost":1.0}));
+        }
         schema.push(json!({"field":"payload","field_type":"Json","store":true,"index_lexical":false,"index_vector":false,"filterable":false,"boost":1.0}));
         schema.push(json!({"field":"graph","field_type":"Json","store":true,"index_lexical":false,"index_vector":false,"filterable":false,"boost":1.0}));
         schema.push(json!({"field":"endpoint_ids","field_type":"StringSet","store":true,"index_lexical":false,"index_vector":false,"filterable":true,"boost":1.0}));
@@ -559,14 +563,10 @@ impl AnySeekFullTextStore {
             }
             #[cfg(feature = "embedded-anyseek")]
             Backend::Embedded(engine) => {
-                Box::pin(local::request(
-                    engine,
-                    scope,
-                    collection,
-                    request,
-                    observation,
-                ))
-                .await
+                let request: std::pin::Pin<Box<dyn Future<Output = _> + Send>> = Box::pin(
+                    local::request(engine, scope, collection, request, observation),
+                );
+                request.await
             }
         }
     }
@@ -833,12 +833,25 @@ impl AnySeekFullTextStore {
         offset: usize,
         all_fields: bool,
     ) -> StorageResult<Value> {
+        self.query_field(scope, filters, query, "terms", (length, offset), all_fields)
+            .await
+    }
+
+    async fn query_field(
+        &self,
+        scope: Scope,
+        filters: Vec<Value>,
+        query: &str,
+        field: &str,
+        (length, offset): (usize, usize),
+        all_fields: bool,
+    ) -> StorageResult<Value> {
         let fields: Vec<&str> = if all_fields {
             Vec::new()
         } else {
             META.to_vec()
         };
-        let (status, result) = self.request(scope, Request::Query(json!({"query":query,"operator":"and","search_fields":["terms"],"filter":filters,"fields":fields,"length":length,"offset":offset,"count":true}))).await?;
+        let (status, result) = self.request(scope, Request::Query(json!({"query":query,"operator":"and","search_fields":[field],"filter":filters,"fields":fields,"length":length,"offset":offset,"count":true}))).await?;
         if !status.is_success() {
             return Err(unavailable());
         }
@@ -982,6 +995,13 @@ impl AnySeekFullTextStore {
                 }
                 let terms = encode_terms(&entry.search_terms, remaining)?;
                 remaining -= terms.len();
+                let summary_terms = entry
+                    .payload
+                    .summary
+                    .as_ref()
+                    .map(|summary| encode_terms(&crate::parsing::lexical(&summary.text), remaining))
+                    .transpose()?;
+                remaining -= summary_terms.as_ref().map_or(0, String::len);
                 let vector = vector_map.remove(&entry.id);
                 if vector
                     .as_ref()
@@ -1001,6 +1021,7 @@ impl AnySeekFullTextStore {
                     publication: String::new(),
                     payload: Some(entry.payload),
                     terms: Some(terms),
+                    summary_terms,
                     profile: vector.as_ref().map(|v| v.profile.clone()),
                     dimension: vector.as_ref().map(|v| v.dimension.to_string()),
                     vector: vector.map(|v| v.embedding),
@@ -1076,8 +1097,26 @@ impl AnySeekFullTextStore {
     /// The caller must still perform final live authority/permission checks.
     pub async fn search(
         &self,
+        query: FullTextQuery,
+        expected: &HashMap<Uuid, SourceVersion>,
+    ) -> StorageResult<Vec<FullTextHit>> {
+        self.search_field(query, expected, "terms").await
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn search_summaries(
+        &self,
+        query: FullTextQuery,
+        expected: &HashMap<Uuid, SourceVersion>,
+    ) -> StorageResult<Vec<FullTextHit>> {
+        self.search_field(query, expected, "summary_terms").await
+    }
+
+    async fn search_field(
+        &self,
         mut query: FullTextQuery,
         expected: &HashMap<Uuid, SourceVersion>,
+        field: &str,
     ) -> StorageResult<Vec<FullTextHit>> {
         let ids = query
             .artifact_ids
@@ -1127,12 +1166,12 @@ impl AnySeekFullTextStore {
         filters.push(filter("generation", [query.generation.to_string()]));
         filters.push(filter("chunk_id", ids.iter().map(Uuid::to_string)));
         let result = self
-            .query(
+            .query_field(
                 query.scope,
                 filters,
                 &encode_terms(&query.search_terms, MAX_REQUEST)?,
-                query.limit,
-                0,
+                field,
+                (query.limit, 0),
                 false,
             )
             .await?;

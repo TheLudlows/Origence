@@ -553,11 +553,11 @@ async fn native_hit_batches_require_exact_committed_publication_keys() {
             keys.push(key);
         }
         if index == 8 {
-            publication(&mut tx, scope, key, "graph", state, "summary").await;
+            publication(&mut tx, scope, key, "graph", state, "entity").await;
         } else {
             for surface in ["full_text", "vector"] {
                 // The original native hit/candidate checks did not restrict type.
-                publication(&mut tx, scope, key, surface, state, "summary").await;
+                publication(&mut tx, scope, key, surface, state, "entity").await;
             }
         }
     }
@@ -632,15 +632,7 @@ async fn legacy_vector_ready_fields_are_distinct_from_exact_content_checks() {
     let mut tx = transaction(&pool, scope).await;
     let row = Record::new(1);
     seed(&mut tx, scope, row, Some(1), Some("active"), "needle").await;
-    publication(
-        &mut tx,
-        scope,
-        row.key(11),
-        "vector",
-        "committed",
-        "summary",
-    )
-    .await;
+    publication(&mut tx, scope, row.key(11), "vector", "committed", "entity").await;
     ready_index(&mut tx, row, "summary", 11).await;
     assert_eq!(
         tx.vector_candidates("profile", 3, 11, None).await.unwrap(),
@@ -1324,70 +1316,6 @@ async fn visible_hit_uses_semantic_source_override_before_root_uuid_fallback() {
 }
 
 #[tokio::test]
-async fn summary_empty_query_needs_no_summary_schema() {
-    let (_dir, pool) = database().await;
-    let mut tx = transaction(&pool, scope()).await;
-    let before = pool.test_counts();
-    assert!(tx.summary_hits("", None).await.unwrap().is_empty());
-    assert!(tx.summary_hits("  ", None).await.unwrap().is_empty());
-    assert_eq!(pool.test_counts(), before);
-    tx.rollback().await.unwrap();
-    pool.shutdown().await.unwrap();
-}
-
-#[tokio::test]
-async fn summary_hits_keep_native_aggregation_and_null_terms() {
-    let (_dir, pool) = database().await;
-    let scope = scope();
-    let mut tx = transaction(&pool, scope).await;
-    let row = Record::new(70_003);
-    seed(&mut tx, scope, row, Some(1), Some("active"), "body").await;
-    db::query(
-        "CREATE TABLE oc_summaries(tenant_id BLOB,workspace_id BLOB,chunk_id BLOB,search_terms)",
-    )
-    .execute(&mut *tx.tx)
-    .await
-    .unwrap();
-    assert!(tx.summary_hits("needle", None).await.unwrap().is_empty());
-    for sql in [
-        "INSERT INTO oc_summaries VALUES(?,?,?,NULL)",
-        "INSERT INTO oc_summaries VALUES(?,?,?,'needle')",
-        "INSERT INTO oc_summaries VALUES(?,?,?,12)",
-    ] {
-        db::query(sql)
-            .bind(scope.tenant_id)
-            .bind(scope.workspace_id)
-            .bind(row.chunk)
-            .execute(&mut *tx.tx)
-            .await
-            .unwrap();
-    }
-    let hits = tx.summary_hits("needle 12", None).await.unwrap();
-    assert_eq!(hits.len(), 1);
-    assert_eq!(hits[0].score, 1.0);
-    assert!(
-        tx.summary_hits("needle absent", None)
-            .await
-            .unwrap()
-            .is_empty()
-    );
-    assert!(tx.visible_hit(row.chunk).await.unwrap().is_some());
-    assert_eq!(tx.summary_hits("needle", None).await.unwrap().len(), 1);
-    db::query("UPDATE oc_chunks SET content_hash=x'02'")
-        .execute(&mut *tx.tx)
-        .await
-        .unwrap();
-    assert!(tx.summary_hits("", None).await.unwrap().is_empty());
-    assert!(tx.summary_hits("absent", None).await.unwrap().is_empty());
-    assert!(matches!(
-        tx.summary_hits("needle", None).await,
-        Err(StorageError::Backend(_))
-    ));
-    tx.rollback().await.unwrap();
-    pool.shutdown().await.unwrap();
-}
-
-#[tokio::test]
 async fn selected_payload_waits_for_other_chunk_version_support() {
     let (_dir, pool) = database().await;
     let scope = scope();
@@ -2045,17 +1973,10 @@ async fn empty_read_sets_need_no_metadata_tables_or_driver_calls() {
             .unwrap()
             .is_empty()
     );
-    assert!(tx.summary_hits("  ", None).await.unwrap().is_empty());
     let raw = read_model::current_rows(&mut tx.tx, scope, Some(&[]), None)
         .await
         .unwrap();
     assert!(tx.local_current_positions(&raw).await.unwrap().is_empty());
-    assert!(
-        tx.current_summary_terms(&raw, &[])
-            .await
-            .unwrap()
-            .is_empty()
-    );
     assert!(tx.active_version_roots(&[]).await.unwrap().is_empty());
     tx.verify_native_candidates(&[]).await.unwrap();
     assert_eq!(pool.test_counts(), before);

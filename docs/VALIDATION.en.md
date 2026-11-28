@@ -20,6 +20,47 @@ Node type checking and 34 UI tests passed. Chromium 156.0.8078.79 passed `check-
 and `check-key-management-browser.cjs` with loopback services and synthetic data, covering the administrator
 label, sign-in, peer workspace creation, key rotation, and global knowledge review. Native Windows is pending.
 
+## 2026-11-28 · PR #186 build and remote publication checks
+
+Based on `24d847b`. Linux with Rust 1.98.0 reproduced the unused-code error in the build
+without default features. Strict Clippy and the full test suites passed without default
+features and with only `sqlite` after the fix.
+`tools/anyseek_smoke.py --cargo-tests --binary <origence> --anyseek-binary <anyseek_server>`
+passed eight real-backend contracts and the HTTP/MCP restart smoke using CI's pinned
+standalone AnySeek `6a46fc7`. The lost-response test checks that the first and resumed
+writes use the same operation epoch and that completion clears the SQLite retry record.
+
+## 2026-11-28 · Publication retry, evidence, and retrieval storage cleanup
+
+Based on `ca40c0c` (main `9275983`). Linux checks used Rust 1.98.0, Node 24.22.1,
+and isolated fresh databases. `cargo test --locked --offline --lib --test local`
+passed 232 library and 225 integration tests. Regressions cover restart after a lost
+model-free publication response, digest tamper rejection, exact Run replay without
+a stored rendered string during a retrieval outage, external reference permissions
+and idempotency, exact retrieval of approved Skill packages, and completed Improve counts
+and child receipts. Console type checking and 34 tests passed, including display
+and removal of external references when access fails.
+
+`python tools/anyseek_smoke.py --embedded --binary <origence>` passed publication,
+diagnostics, replay, and restart with the real embedded engine. A loopback model fixture
+and three Chinese knowledge documents also passed within-chunk summary AND matching,
+independent ranking contribution, isolation from keyword retrieval, and restart.
+Formatting, strict all-target Clippy with all features and with only `sqlite`, and
+`git diff --check` passed. Native Windows, standalone remote AnySeek, real models, and
+GitHub CI were not run.
+
+## 2026-11-28 · Publication and experience copies
+
+Based on main `9275983`, Linux verification used Rust 1.98.0 and isolated SQLite databases.
+`cargo test --locked --offline --lib --test local` passed 234 library tests and 224 integration tests.
+Formatting, strict all-target Clippy with all features and with only `sqlite`, and `git diff --check` passed.
+Completed message batches retained exact receipt metadata. Failure and restart checks verified that
+chunk identities and model call counts were preserved. Public experience reads confirmed that the
+source event no longer duplicates the text and its rendered text matches the exact published version.
+`tools/anyseek_smoke.py --embedded` and an isolated HTTP smoke verified publication and restart
+against real embedded AnySeek, including multilingual experience text, removal of the SQLite copies,
+and withdrawal. Native Windows and remote CI were not run.
+
 ## 2026-11-28 · Deployment administrators and peer workspaces
 
 Linux verification used main `dc1f040`, Rust 1.98.0, Node 24.22.1, and isolated SQLite databases.

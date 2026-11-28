@@ -595,13 +595,16 @@ interface VerificationRecord {
     verification_id: string;
     through_sequence: number;
     prefix_digest: string;
+  } & ({
+    external_ref: string;
+  } | {
     verifier_label: string;
     assessed_at_ms: number;
     conclusion: "passed" | "failed" | "inconclusive";
     basis_summary: string;
     basis_sequences: number[];
     reported_skill_version: { skill_id: string; version: number; digest: string } | null;
-  };
+  });
   recorder_principal_id: string;
   recorded_at_ms: number;
   withdrawal: { reason: string; recorded_at_ms: number } | null;
@@ -624,6 +627,12 @@ async function verificationPanel(root: HTMLElement, id: string, ctx: ViewContext
       after = page.next_after;
       body.replaceChildren(...records.map((r) => {
         const a = r.assessment;
+        if ("external_ref" in a) return panel(
+          r.withdrawal ? "已撤销的外部核验" : "关联的外部核验",
+          el("p", "mono", a.external_ref),
+          el("p", "mono", `固定前缀：1–${a.through_sequence} · ${a.prefix_digest}`),
+          r.withdrawal ? el("p", "", `撤销：${r.withdrawal.reason} · ${date(r.withdrawal.recorded_at_ms)}`) : null,
+        );
         return panel(
           r.withdrawal ? "已撤销的外部核验" : "Owner 转录的外部核验",
           badge(({ passed: "外部结论：通过", failed: "外部结论：失败", inconclusive: "外部结论：无法确定" })[a.conclusion]),
@@ -657,6 +666,6 @@ async function verificationPanel(root: HTMLElement, id: string, ctx: ViewContext
     refresh.disabled = true;
     try { await load(); } finally { refresh.disabled = false; }
   });
-  root.replaceChildren(el("p", "muted", "仅 owner 转录外部证据；平台未核验其结论，核验者标签不授予 Run 正文访问权。"), body, more, refresh, error);
+  root.replaceChildren(el("p", "muted", "Run 所有者可以关联或转录外部核验。平台未核验其结论，核验者标签不授予 Run 正文访问权。"), body, more, refresh, error);
   await load();
 }

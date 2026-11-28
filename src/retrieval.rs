@@ -206,6 +206,9 @@ impl Service {
             vector_ms = vector_started.elapsed().as_secs_f64() * 1000.0;
         }
         let mut full_text_hits = Vec::new();
+        let mut summary_hits = Vec::new();
+        let summaries_enabled =
+            effective == "hybrid" && input.memory_identity.is_none() && input.components.summaries;
         if effective != "vector" && !terms.is_empty() {
             let mut eligibility = match keyword_authorization.take() {
                 Some(tx) => tx,
@@ -224,23 +227,31 @@ impl Service {
                 if ids.is_empty() {
                     continue;
                 }
-                for hit in self
-                    .engine
-                    .vector()
-                    .search_full_text_authorized(
-                        FullTextQuery {
-                            scope: scope(a),
-                            artifact_ids: Some(ids),
-                            generation,
-                            search_terms: terms.clone(),
-                            limit: 100,
-                        },
-                        &sources,
-                    )
-                    .await?
-                {
-                    full_text_hits.push((generation, hit));
+                let query = FullTextQuery {
+                    scope: scope(a),
+                    artifact_ids: Some(ids),
+                    generation,
+                    search_terms: terms.clone(),
+                    limit: 100,
+                };
+                if summaries_enabled {
+                    summary_hits.extend(
+                        self.engine
+                            .vector()
+                            .search_summaries_authorized(query.clone(), &sources)
+                            .await?
+                            .into_iter()
+                            .map(|hit| (generation, hit)),
+                    );
                 }
+                full_text_hits.extend(
+                    self.engine
+                        .vector()
+                        .search_full_text_authorized(query, &sources)
+                        .await?
+                        .into_iter()
+                        .map(|hit| (generation, hit)),
+                );
             }
         }
         if let Some(tx) = keyword_authorization {
@@ -261,6 +272,7 @@ impl Service {
             terms,
             native_hits,
             full_text_hits,
+            summary_hits,
         })))
     }
 
@@ -280,9 +292,10 @@ impl Service {
             terms,
             native_hits,
             full_text_hits,
+            summary_hits,
         } = prepared;
         let profile = self.models.profile.as_deref().unwrap_or("");
-        let native_count = native_hits.len() + full_text_hits.len();
+        let native_count = native_hits.len() + full_text_hits.len() + summary_hits.len();
         let branches_started = std::time::Instant::now();
         let summaries_enabled =
             effective == "hybrid" && input.memory_identity.is_none() && input.components.summaries;
@@ -298,52 +311,9 @@ impl Service {
         let mut branches = Vec::new();
         let mut ranked_native = Vec::new();
         if effective != "vector" {
-            let mut keyword = Vec::new();
-            let mut seen = HashMap::new();
-            let keys: Vec<_> = full_text_hits
-                .iter()
-                .map(|(generation, native)| (native.id, native.source, *generation))
-                .collect();
-            let candidates = tx.full_text_hits(&keys).await?;
-            let missing: Vec<_> = keys
-                .iter()
-                .filter(|key| !candidates.contains_key(key))
-                .map(|key| key.0)
-                .collect();
-            let live_missing = tx.visible_hits(&missing).await?;
-            for (generation, native) in full_text_hits {
-                let candidate = candidates
-                    .get(&(native.id, native.source, generation))
-                    .cloned();
-                if let Some(mut hit) = batch_native_candidate(native.id, candidate, &live_missing)?
-                {
-                    if asset_filter.is_some_and(|asset| hit.asset_id != asset) {
-                        return Err(AppError::Conflict(
-                            "native retrieval identity changed".into(),
-                        ));
-                    }
-                    if !unique_native(
-                        &mut seen,
-                        native.id,
-                        generation,
-                        native.source,
-                        native.score,
-                    )? {
-                        continue;
-                    }
-                    hit.score = f64::from(native.score);
-                    ranked_native.push(NativeRankedCandidate {
-                        hit: hit.clone(),
-                        proof: NativePublicationProof::FullText {
-                            source: native.source,
-                            generation,
-                        },
-                    });
-                    keyword.push(hit);
-                }
-            }
-            prepare_branch(&mut keyword, 100);
-            branches.push(keyword);
+            branches.push(
+                lexical_branch(&mut tx, full_text_hits, asset_filter, &mut ranked_native).await?,
+            );
         }
         let mut vectors = Vec::new();
         let mut seen_vectors = HashMap::new();
@@ -397,7 +367,9 @@ impl Service {
             branches.push(vectors);
         }
         if summaries_enabled {
-            branches.push(tx.summary_hits(&terms, asset_filter).await?);
+            branches.push(
+                lexical_branch(&mut tx, summary_hits, asset_filter, &mut ranked_native).await?,
+            );
         }
         let (entities, relations) = if let Some(graph) = graph {
             let (entities, relations, evidence_hits) =
@@ -577,6 +549,60 @@ struct PreparedSearch {
     terms: String,
     native_hits: Vec<(i64, VectorHit)>,
     full_text_hits: Vec<(i64, FullTextHit)>,
+    summary_hits: Vec<(i64, FullTextHit)>,
+}
+
+async fn lexical_branch(
+    tx: &mut SqliteTx,
+    native_hits: Vec<(i64, FullTextHit)>,
+    asset_filter: Option<Uuid>,
+    ranked_native: &mut Vec<NativeRankedCandidate>,
+) -> Result<Vec<SearchHit>> {
+    let mut branch = Vec::new();
+    let mut seen = HashMap::new();
+    let keys: Vec<_> = native_hits
+        .iter()
+        .map(|(generation, native)| (native.id, native.source, *generation))
+        .collect();
+    let candidates = tx.full_text_hits(&keys).await?;
+    let missing: Vec<_> = keys
+        .iter()
+        .filter(|key| !candidates.contains_key(key))
+        .map(|key| key.0)
+        .collect();
+    let live_missing = tx.visible_hits(&missing).await?;
+    for (generation, native) in native_hits {
+        let candidate = candidates
+            .get(&(native.id, native.source, generation))
+            .cloned();
+        if let Some(mut hit) = batch_native_candidate(native.id, candidate, &live_missing)? {
+            if asset_filter.is_some_and(|asset| hit.asset_id != asset) {
+                return Err(AppError::Conflict(
+                    "native retrieval identity changed".into(),
+                ));
+            }
+            if !unique_native(
+                &mut seen,
+                native.id,
+                generation,
+                native.source,
+                native.score,
+            )? {
+                continue;
+            }
+            hit.score = f64::from(native.score);
+            ranked_native.push(NativeRankedCandidate {
+                hit: hit.clone(),
+                proof: NativePublicationProof::FullText {
+                    source: native.source,
+                    generation,
+                },
+            });
+            branch.push(hit);
+        }
+    }
+    prepare_branch(&mut branch, 100);
+    Ok(branch)
 }
 
 async fn project_graph_evidence(

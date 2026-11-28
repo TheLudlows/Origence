@@ -403,34 +403,15 @@ impl SqliteTx {
     }
 }
 
-pub(super) fn redact_archive_replay(payload: &mut Value) -> StorageResult<bool> {
-    if payload["kind"] != "context_prepared" || payload["replay_bundle_digest"].is_string() {
-        return Ok(false);
-    }
-    let mut replay: crate::evidence::EvidenceBundle =
-        serde_json::from_value(payload["replay_bundle"].clone())
-            .map_err(|_| StorageError::Unavailable("invalid prepared context snapshot".into()))?;
-    if !replay
-        .items
-        .iter()
-        .any(|item| matches!(item.provenance, EvidenceProvenance::SessionTurn { .. }))
-    {
-        return Ok(false);
-    }
-    if payload["bundle_digest"] != hash(encode(&replay)?) {
-        return Err(StorageError::Unavailable(
-            "invalid prepared context snapshot".into(),
-        ));
-    }
+fn compact_run_replay(bundle: &crate::evidence::EvidenceBundle) -> crate::evidence::EvidenceBundle {
+    let mut replay = bundle.clone();
     for item in &mut replay.items {
         if matches!(item.provenance, EvidenceProvenance::SessionTurn { .. }) {
             item.content.clear();
         }
     }
     replay.rendered_context.clear();
-    payload["replay_bundle_digest"] = json!(hash(encode(&replay)?));
-    payload["replay_bundle"] = json!(replay);
-    Ok(true)
+    replay
 }
 
 impl SqliteTx {
@@ -491,7 +472,7 @@ impl SqliteTx {
         let mut response =
             json!({"run_id":run,"event_id":event_id,"sequence":seq,"recorded_bundle":bundle});
         if payload["replay_bundle_digest"].is_string() {
-            response["archive_bundle_digest"] = payload["bundle_digest"].clone();
+            response["original_bundle_digest"] = payload["bundle_digest"].clone();
         }
         Ok(Some(response))
     }
@@ -627,8 +608,13 @@ impl SqliteTx {
                 "event identity reused with different payload".into(),
             ));
         }
-        let mut payload = json!({"kind":"context_prepared","event_id":event_id,"reporter":"server","context_request_digest":request_digest,"bundle_digest":hash(encode(bundle)?),"replay_bundle":bundle,"citations":citations,"retrieval":bundle.retrieval,"routes":bundle.routes,"warnings":bundle.warnings,"budget":bundle.budget,"used_bytes":bundle.used_bytes,"omitted_conflict_groups":bundle.omitted_conflict_groups,"delivery_status":"prepared_not_confirmed_received_or_used"});
-        redact_archive_replay(&mut payload)?;
+        let replay = compact_run_replay(bundle);
+        let digest = hash(encode(bundle)?);
+        let replay_digest = hash(encode(&replay)?);
+        let mut payload = json!({"kind":"context_prepared","event_id":event_id,"reporter":"server","context_request_digest":request_digest,"bundle_digest":digest,"replay_bundle":replay,"citations":citations,"retrieval":bundle.retrieval,"routes":bundle.routes,"warnings":bundle.warnings,"budget":bundle.budget,"used_bytes":bundle.used_bytes,"omitted_conflict_groups":bundle.omitted_conflict_groups,"delivery_status":"prepared_not_confirmed_received_or_used"});
+        if replay_digest != digest {
+            payload["replay_bundle_digest"] = json!(replay_digest);
+        }
         self.validate_prepared_payload(&payload).await?;
         let payload = encode(&payload)?;
         let digest = hash(&payload);

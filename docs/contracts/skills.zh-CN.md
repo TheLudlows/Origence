@@ -10,7 +10,7 @@
 - 所有者显式提交审阅 ID、精确修订、指定审阅者凭据、工作空间/Skill/版本目标及选定的脱敏依据。仅指定审阅者及所有者可读审阅包。审阅者不会隐式获得读取原始归档的权限。
 - `decide_skill_review(review, packet_digest, approve)` 要求获指定的凭据当前具有 writer 或 admin 权限。决定不可变，变更须新建审阅 ID。凭据轮换要求重新指定审阅者。获授权的逻辑 key 轮换保持候选所有权。
 - `publish_skill(review, packet_digest)` 是独立显式操作。重新核对当前写入权限、审批凭据、当前候选修订、支持来源权威和确切生成包。候选的任何改动都会使旧批准失效，包括修改来源或私有备注。
-- 发布通过现有 SQLite 权威事务保存有界、不可变的包字节及来源。不执行外部 I/O，不启动 Worker，不产生半安装包。版本单调递增。当前包保存在 SQLite 中，原始文档字节保存在 Blob 存储。
+- 发布通过 SQLite 权威事务保存来源、已批准审阅记录的引用和包摘要。包字节只保存在不可变审阅记录中。分发前核对清单、摘要和来源。版本单调递增，发布事务无需外部 I/O。
 - `skill_package(skill, version)` 重新检查来源和撤回状态后，只返回获准的清单与文件。分发包不含审阅依据、原始来源 ID、私有备注和批准记录。在来源和支持仍有效时，可以使用精确历史版本。向 Run 追加事件不会改变已批准的不可变前缀。撤销或撤回后拒绝读取。
 
 `SkillPackage` 包含 `manifest`、`files` 和 `digest`。格式 1 清单仅含租户与工作空间、Skill ID 和版本、名称、描述及工件哈希。文件由服务端生成，包含 `SKILL.md` 及最多十六份有界 `references/<lowercase-slug>.md|.txt` 文件。摘要是规范 serde JSON 元组 `(manifest, files)` 的 SHA-256，map 按序编码。`SkillPackage::validate()` 核对精确生成的 frontmatter、允许名单中的文件及全部哈希。实际分发仍须执行实时授权判断。

@@ -178,14 +178,6 @@ CREATE TABLE oc_chunks (
 CREATE INDEX oc_chunks_scope ON oc_chunks(tenant_id, workspace_id, asset_id, version);
 CREATE INDEX oc_versions_source ON oc_versions(tenant_id, workspace_id, source_event_id);
 
-CREATE TABLE oc_summaries (
-    tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,
-    chunk_id BLOB NOT NULL,
-    search_terms TEXT NOT NULL,
-    PRIMARY KEY (tenant_id, workspace_id, id),
-    FOREIGN KEY (tenant_id, workspace_id, chunk_id) REFERENCES oc_chunks(tenant_id, workspace_id, id)
-);
-
 CREATE TABLE oc_commands (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, principal_id BLOB NOT NULL,
     dedup_scope TEXT NOT NULL,
@@ -209,7 +201,7 @@ CREATE INDEX oc_events_file ON oc_events(tenant_id, workspace_id, file_id);
 CREATE TABLE oc_artifact_owners (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL,
     source_id BLOB NOT NULL, version INTEGER NOT NULL,
-    artifact_type TEXT NOT NULL CHECK (artifact_type IN ('chunk','summary','entity','relation')),
+    artifact_type TEXT NOT NULL CHECK (artifact_type IN ('chunk','entity','relation')),
     artifact_id BLOB NOT NULL,
     chunk_id BLOB,
     created_at INTEGER NOT NULL,
@@ -232,7 +224,7 @@ CREATE TABLE oc_index_entries (
 CREATE TABLE oc_artifact_ledger (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL,
     source_id BLOB NOT NULL, version INTEGER NOT NULL,
-    artifact_type TEXT NOT NULL CHECK (artifact_type IN ('chunk','summary','entity','relation')),
+    artifact_type TEXT NOT NULL CHECK (artifact_type IN ('chunk','entity','relation')),
     artifact_id BLOB NOT NULL,
     surface TEXT NOT NULL CHECK (surface IN ('vector','graph','full_text')),
     generation INTEGER NOT NULL DEFAULT 1,

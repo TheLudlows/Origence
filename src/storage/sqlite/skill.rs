@@ -281,21 +281,38 @@ impl SqliteTx {
                 "Skill version must follow published history".into(),
             ));
         }
-        sqlite_db::query("INSERT INTO oc_skill_packages(tenant_id,workspace_id,skill_id,version,review_id,owner_key_id,sources,package,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
+        sqlite_db::query("INSERT INTO oc_skill_packages(tenant_id,workspace_id,skill_id,version,review_id,owner_key_id,sources,package_digest,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(target.skill_id).bind(i64::from(target.version)).bind(review).bind(owner)
-            .bind(encode(&content.sources)?).bind(encode(&package)?).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
+            .bind(encode(&content.sources)?).bind(&package.digest).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(package)
     }
     /// Live-authorized distribution; no private provenance or review basis returned.
     pub async fn skill_package(&mut self, id: Uuid, version: u32) -> StorageResult<SkillPackage> {
         self.check_permission(Permission::Read).await?;
-        let (owner,sources,package):(Uuid,String,String)=sqlite_db::query_as("SELECT owner_key_id,sources,package FROM oc_skill_packages WHERE tenant_id=? AND workspace_id=? AND skill_id=? AND version=? AND NOT withdrawn")
+        let (owner,review,sources,digest):(Uuid,Uuid,String,String)=sqlite_db::query_as("SELECT owner_key_id,review_id,sources,package_digest FROM oc_skill_packages WHERE tenant_id=? AND workspace_id=? AND skill_id=? AND version=? AND NOT withdrawn")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).bind(i64::from(version))
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?.ok_or(StorageError::NotFound)?;
         self.check_skill_sources(owner, &decode::<Vec<SkillSource>>(&sources)?)
             .await?;
-        let package: SkillPackage = decode(&package)?;
+        // The accepted review packet owns the frozen bytes. Open it only
+        // through this published pointer and return only the distributable part.
+        let (_, _, _, packet, review_digest, decision) = self.skill_review_row(review).await?;
+        let packet: SkillReviewPacket = decode(&packet)?;
+        let package = packet.package;
         package.validate()?;
+        if decision != "approved"
+            || packet.review_id != review
+            || packet.digest != review_digest
+            || package.digest != digest
+            || package.manifest.tenant_id != self.scope.tenant_id
+            || package.manifest.workspace_id != self.scope.workspace_id
+            || package.manifest.skill_id != id
+            || package.manifest.version != version
+        {
+            return Err(StorageError::Unavailable(
+                "invalid published Skill package".into(),
+            ));
+        }
         Ok(package)
     }
     pub async fn withdraw_skill(&mut self, id: Uuid, version: u32) -> StorageResult<()> {

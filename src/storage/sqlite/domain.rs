@@ -369,16 +369,6 @@ impl DomainTx for SqliteTx {
             .await
     }
 
-    async fn insert_summary(
-        &mut self,
-        summary: Uuid,
-        chunk: Uuid,
-        search_terms: &str,
-    ) -> StorageResult<()> {
-        self.insert_summary_inner(summary, chunk, search_terms)
-            .await
-    }
-
     async fn update_asset_version(
         &mut self,
         asset: Uuid,

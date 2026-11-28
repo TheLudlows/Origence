@@ -65,7 +65,7 @@ key. See [client commands](CLIENTS.en.md#direct-http-mcp).
 
 ## AnySeek full-text and vector retrieval
 
-Full-text, vector, and one-hop graph candidates come only from AnySeek. SQLite decides versions, permissions, sources, and visibility. Published text and summary text are persisted in the same AnySeek collection. Claude Code and Codex need only an Origence key. See [client integration](CLIENTS.en.md).
+Full-text, summary, vector, and one-hop graph candidates come only from AnySeek. SQLite decides versions, permissions, sources, and visibility. Published text and summary text are persisted in the same AnySeek collection. Claude Code and Codex need only an Origence key. See [client integration](CLIENTS.en.md).
 
 ### Origence local mode
 

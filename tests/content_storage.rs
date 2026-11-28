@@ -75,9 +75,7 @@ async fn stored_content_shares_index_records_and_restores_history_after_reopen()
     for (table, removed) in [
         ("oc_chunks", "content"),
         ("oc_versions", "content"),
-        ("oc_summaries", "text"),
         ("oc_chunks", "search_terms"),
-        ("oc_summaries", "model_revision"),
     ] {
         let rows = db::query(&format!("PRAGMA table_info({table})"))
             .fetch_all(service.engine.relational().pool())
@@ -117,35 +115,87 @@ async fn stored_content_shares_index_records_and_restores_history_after_reopen()
 }
 
 #[tokio::test]
-async fn damaged_frozen_terms_fail_without_retokenizing_or_republishing() {
-    for field in ["search_terms", "summary_terms"] {
-        let (dir, service, auth, first) = setup().await;
-        let fixture = crate::support::fixture(dir.path(), None);
-        fixture.reject_writes(true);
-        let second = publish(&service, &auth, "retry", "Atlas changed source").await;
-        let job = id(&second, "job_id");
-        assert_eq!(
-            service.job(&auth, job).await.unwrap()["state"],
-            "retry_wait"
-        );
-        let attempts = fixture.posts();
-        let path = format!("$.publication.memories[0].chunks[0].{field}");
-        db::query("UPDATE oc_jobs SET payload=json_remove(payload,?),next_retry_at=0 WHERE tenant_id=? AND workspace_id=? AND id=?")
-            .bind(path).bind(auth.tenant_id).bind(auth.workspace_id).bind(job)
-            .execute(service.engine.relational().pool()).await.unwrap();
-        fixture.reject_writes(false);
-        assert!(worker::process_next(&service).await.unwrap());
-        assert_eq!(service.job(&auth, job).await.unwrap()["state"], "failed");
-        assert_eq!(fixture.posts(), attempts);
-        assert_eq!(fixture.snapshot_records().len(), 1);
-        assert_eq!(
-            service
-                .get(&auth, id(&first, "asset_id"), None)
-                .await
-                .unwrap()["version"],
-            1
-        );
-    }
+async fn lexical_retry_uses_a_seal_and_rejects_tampering() {
+    let (dir, service, auth, first) = setup().await;
+    let fixture = crate::support::fixture(dir.path(), None);
+    fixture.reject_writes(true);
+    let second = publish(&service, &auth, "retry", "Atlas changed source").await;
+    let job = id(&second, "job_id");
+    assert_eq!(
+        service.job(&auth, job).await.unwrap()["state"],
+        "retry_wait"
+    );
+    let attempts = fixture.posts();
+    let payload: String = db::query_scalar(
+        "SELECT payload FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(auth.tenant_id)
+    .bind(auth.workspace_id)
+    .bind(job)
+    .fetch_one(service.engine.relational().pool())
+    .await
+    .unwrap();
+    let payload: Value = serde_json::from_str(&payload).unwrap();
+    assert!(payload.get("publication").is_none());
+    assert!(
+        payload["lexical_publication"]["digest"]
+            .as_str()
+            .is_some_and(|digest| digest.len() == 64)
+    );
+    db::query("UPDATE oc_jobs SET payload=json_set(payload,'$.lexical_publication.digest',?),next_retry_at=0 WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind("0".repeat(64)).bind(auth.tenant_id).bind(auth.workspace_id).bind(job)
+        .execute(service.engine.relational().pool()).await.unwrap();
+    fixture.reject_writes(false);
+    assert!(worker::process_next(&service).await.unwrap());
+    assert_eq!(service.job(&auth, job).await.unwrap()["state"], "failed");
+    assert_eq!(fixture.posts(), attempts);
+    assert_eq!(fixture.snapshot_records().len(), 1);
+    assert_eq!(
+        service
+            .get(&auth, id(&first, "asset_id"), None)
+            .await
+            .unwrap()["version"],
+        1
+    );
+}
+
+#[tokio::test]
+async fn lexical_publication_recovers_after_a_lost_write_response() {
+    let (dir, service, auth, first) = setup().await;
+    let fixture = crate::support::fixture(dir.path(), None);
+    fixture.lose_next_write();
+    let text = "Atlas 中文🙂 retry after lost response";
+    let receipt = publish(&service, &auth, "lost-write", text).await;
+    let job = id(&receipt, "job_id");
+    assert_eq!(
+        service.job(&auth, job).await.unwrap()["state"],
+        "retry_wait"
+    );
+    let asset = id(&first, "asset_id");
+    assert_eq!(service.get(&auth, asset, None).await.unwrap()["version"], 1);
+    service.engine.shutdown().await.unwrap();
+    drop(service);
+
+    let service = crate::support::open_service(dir.path(), Models::disabled())
+        .await
+        .unwrap();
+    db::query("UPDATE oc_jobs SET next_retry_at=0 WHERE tenant_id=? AND workspace_id=? AND id=?")
+        .bind(auth.tenant_id)
+        .bind(auth.workspace_id)
+        .bind(job)
+        .execute(service.engine.relational().pool())
+        .await
+        .unwrap();
+    assert!(worker::process_next(&service).await.unwrap());
+    assert_eq!(service.job(&auth, job).await.unwrap()["state"], "completed");
+    assert_eq!(
+        service.get(&auth, asset, Some(2)).await.unwrap()["content"],
+        text
+    );
+    assert_eq!(
+        service.get(&auth, asset, Some(1)).await.unwrap()["content"],
+        "Atlas 正文🙂\r\n第二行 <literal>"
+    );
 }
 
 #[tokio::test]

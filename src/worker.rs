@@ -22,7 +22,6 @@ struct PublishedChunk {
     embedding: Option<Vec<f32>>,
     summary: String,
     search_terms: String,
-    summary_terms: String,
 }
 #[derive(Clone, Serialize, Deserialize)]
 struct PublishedMemory {
@@ -46,6 +45,14 @@ struct Publication {
     receipt_metadata: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     full_text_operation_epoch: Option<u64>,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct LexicalPublication {
+    generation: i64,
+    epoch: u64,
+    digest: String,
 }
 /// One asset's pending publication built before model IO, version still to be
 /// verified against the live asset at commit time.
@@ -243,6 +250,13 @@ async fn process_claim(service: &Service, claim: &mut ClaimedJob) -> Result<()> 
     let mut tx = service.read(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
     let profile = payload.embedding_profile().map(str::to_owned);
+    if claim.payload["lexical_publication"]["generation"] == claim.generation
+        && service.models.extraction_enabled()
+    {
+        return Err(AppError::Unavailable(
+            "lexical publication configuration changed".into(),
+        ));
+    }
     if profile.is_some() && profile != service.models.profile {
         return Err(AppError::Unavailable(
             "worker embedding profile differs from accepted job".into(),
@@ -671,7 +685,6 @@ async fn prepare(
                 embedding,
                 summary,
                 search_terms: String::new(),
-                summary_terms: String::new(),
             });
         }
         memories.push(PublishedMemory {
@@ -696,12 +709,11 @@ async fn prepare(
     } else {
         None
     };
-    // Freeze both indexes once, outside the executor and every SQL transaction.
+    // Tokenize source text outside the executor and every SQL transaction.
     let memories = tokio::task::spawn_blocking(move || {
         for memory in &mut memories {
             for chunk in &mut memory.chunks {
                 chunk.search_terms = parsing::lexical(&chunk.chunk.content);
-                chunk.summary_terms = parsing::lexical(&chunk.summary);
             }
         }
         memories
@@ -849,16 +861,64 @@ async fn publish_prepared(
             "extraction cannot replace a published memory".into(),
         ));
     }
-    if publication.full_text_operation_epoch.is_none() {
-        publication.full_text_operation_epoch = Some(crate::storage::anyseek::operation_epoch()?);
+    let saved = claim
+        .payload
+        .get("lexical_publication")
+        .filter(|saved| saved["generation"] == claim.generation)
+        .cloned()
+        .map(decode::<LexicalPublication>)
+        .transpose()?;
+    let lexical_only = matches!(
+        payload,
+        JobPayload::Publish { .. } | JobPayload::Ingest { .. } | JobPayload::Restore { .. }
+    ) && publication.profile.is_none()
+        && publication.summary_model.is_none()
+        && publication.graph.is_none();
+    if saved.is_some() && !lexical_only {
+        return Err(AppError::Unavailable(
+            "lexical publication configuration changed".into(),
+        ));
     }
+    let epoch = match (saved.as_ref(), publication.full_text_operation_epoch) {
+        (Some(saved), _) => saved.epoch,
+        (None, Some(epoch)) => epoch,
+        (None, None) => crate::storage::anyseek::operation_epoch()?,
+    };
+    publication.full_text_operation_epoch = Some(epoch);
+    let (publication, seal) = if lexical_only {
+        let (publication, digest) = tokio::task::spawn_blocking(move || {
+            let bytes = serde_json::to_vec(&publication)?;
+            Ok::<_, serde_json::Error>((publication, crate::storage::hash(bytes)))
+        })
+        .await
+        .map_err(|error| AppError::Internal(error.into()))?
+        .map_err(|error| AppError::Internal(error.into()))?;
+        let seal = LexicalPublication {
+            generation: claim.generation,
+            epoch,
+            digest,
+        };
+        if saved.is_some_and(|saved| saved != seal) {
+            return Err(AppError::Invalid(
+                "lexical publication differs from the original attempt".into(),
+            ));
+        }
+        (publication, Some(seal))
+    } else {
+        (publication, None)
+    };
     let graph_projection = graph_publication(claim, payload.kind(), &publication)?;
     let a = auth(claim);
     let entries = ledger(claim, &publication)?;
     let mut tx = service.write(&a, Permission::Write).await?;
     guard(&mut tx, claim, payload).await?;
-    tx.save_publication(claim.job_id, &json!(publication))
-        .await?;
+    if let Some(seal) = seal {
+        tx.save_lexical_publication(claim.job_id, &json!(seal))
+            .await?;
+    } else {
+        tx.save_publication(claim.job_id, &json!(publication))
+            .await?;
+    }
     for entry in &entries {
         tx.register_pending(entry.clone()).await?;
         tx.resume_pending(entry.key).await?;
@@ -947,11 +1007,6 @@ async fn publish_prepared(
             )
             .await?;
             tx.register_owner(source, "chunk", c.id, Some(c.id)).await?;
-            if !c.summary.is_empty() {
-                let id = graph::entity_id(&format!("summary:{}", c.id));
-                tx.insert_summary(id, c.id, &c.summary_terms).await?;
-                tx.register_owner(source, "summary", id, Some(c.id)).await?;
-            }
             if let Some(e) = &c.embedding {
                 tx.index_ready(
                     c.id,
@@ -1135,7 +1190,6 @@ mod tests {
                         embedding: None,
                         summary: String::new(),
                         search_terms: "alpha uses beta".into(),
-                        summary_terms: String::new(),
                     })
                     .collect(),
             }],

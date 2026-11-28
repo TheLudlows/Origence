@@ -412,6 +412,44 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
             .await
             .unwrap()
     );
+    let link_input = json!({
+        "verification_id":Uuid::new_v4(), "through_sequence":2,
+        "prefix_digest":prefix["digest"], "external_ref":"finance/assessment-123"
+    });
+    let linked = service
+        .link_run_verification(&a, run, serde_json::from_value(link_input.clone()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(linked["evidence_origin"], "owner_linked_external");
+    assert_eq!(linked["assessment"], link_input);
+    assert_eq!(linked["platform_verification"], "not_performed");
+    assert_eq!(
+        linked,
+        client
+            .call(Method::POST, &route, Some(&link_input), None)
+            .await
+            .unwrap()
+    );
+    assert!(
+        outsider
+            .call(Method::POST, &route, Some(&link_input), None)
+            .await
+            .is_err()
+    );
+    let mut changed_link = link_input.clone();
+    changed_link["external_ref"] = json!("finance/another-assessment");
+    assert!(matches!(
+        client
+            .call(Method::POST, &route, Some(&changed_link), None)
+            .await,
+        Err(origence::error::AppError::Conflict(_))
+    ));
+    assert!(
+        client.call(Method::GET, &route, None, None).await.unwrap()["items"]
+            .as_array()
+            .unwrap()
+            .contains(&linked)
+    );
     let overview = || client.call(Method::GET, "/v1/runs/overview", None, None);
     assert_eq!(overview().await.unwrap()["created_runs"], 1);
     // Source withdrawal blocks even historical/revoked assessment read and replay.
