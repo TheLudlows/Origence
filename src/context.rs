@@ -149,6 +149,22 @@ impl Service {
             None
         };
         let mut tx = self.read(auth, permission).await?;
+        let mut global = Vec::new();
+        if let Some(knowledge) = bundle
+            .routes
+            .iter()
+            .find(|r| r.route == EvidenceRoute::Knowledge)
+            && !query.terms.is_empty()
+        {
+            let releases = tx.approved_global_knowledge().await?;
+            if !releases.is_empty() {
+                tx.commit().await?;
+                global = self
+                    .find_global_keywords(releases, &query.terms, knowledge.candidate_limit)
+                    .await?;
+                tx = self.read(auth, permission).await?;
+            }
+        }
         tx.verify_native_candidates(&ranked_native).await?;
         let mut items = Vec::new();
         let mut memory_accounting = bundle
@@ -224,9 +240,12 @@ impl Service {
             .iter_mut()
             .find(|r| r.route == EvidenceRoute::Knowledge)
         {
-            let shared = tx
-                .global_keyword_hits(&query.terms, accounting.candidate_limit)
-                .await?;
+            let mut shared = Vec::new();
+            for (header, hit) in global {
+                if tx.global_header(header.id).await? == header {
+                    shared.push(hit);
+                }
+            }
             if !shared.is_empty() {
                 if query.effective_mode != "keyword" {
                     bundle

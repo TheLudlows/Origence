@@ -130,7 +130,7 @@ CREATE TABLE oc_global_knowledge (
     id BLOB PRIMARY KEY,
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, asset_id BLOB NOT NULL,
     version INTEGER NOT NULL, source_event_id BLOB NOT NULL,
-    title TEXT NOT NULL, content_hash TEXT NOT NULL,
+    title TEXT NOT NULL, content_hash TEXT NOT NULL, chunk_manifest TEXT NOT NULL,
     state TEXT NOT NULL CHECK (state IN ('pending','approved','rejected','withdrawn')),
     submitted_at INTEGER NOT NULL, reviewed_at INTEGER,
     UNIQUE (tenant_id, workspace_id, asset_id, version),
@@ -138,18 +138,6 @@ CREATE TABLE oc_global_knowledge (
         REFERENCES oc_versions(tenant_id, workspace_id, asset_id, version)
 );
 CREATE INDEX oc_global_knowledge_state ON oc_global_knowledge(state,id);
-
-CREATE TABLE oc_global_knowledge_chunks (
-    publication_id BLOB NOT NULL, id BLOB NOT NULL UNIQUE,
-    byte_start INTEGER NOT NULL CHECK (byte_start >= 0),
-    byte_end INTEGER NOT NULL CHECK (byte_end > byte_start),
-    content TEXT NOT NULL, terms TEXT NOT NULL,
-    enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0,1)),
-    PRIMARY KEY (publication_id, byte_start),
-    FOREIGN KEY (publication_id) REFERENCES oc_global_knowledge(id)
-);
-CREATE INDEX oc_global_knowledge_enabled
-    ON oc_global_knowledge_chunks(publication_id,byte_start) WHERE enabled;
 
 CREATE TABLE oc_jobs (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, id BLOB NOT NULL,

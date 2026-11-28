@@ -7,6 +7,16 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 全局知识正文迁入 AnySeek
+
+基于 main `340aa50`，Linux 和 Rust 1.98.0。库测试 232 项、本地集成测试 225 项通过。
+全局知识回归复跑覆盖写入回执丢失后的续跑、待审隔离、跨租户读取、固定版本、私有来源删除、
+篡改正文拒绝返回，以及下架后拒绝 Run 回放。全功能和仅 `sqlite` 的全目标严格 Clippy、
+Rust 格式检查、`git diff --check` 通过。
+
+使用独立 AnySeek `6a46fc7` 运行 `tools/anyseek_smoke.py --anyseek-binary <anyseek_server> --run python tools/mcp_smoke.py --binary <origence>`，
+验证 HTTP/MCP 全局读取与重启。未运行原生 Windows 或 GitHub CI。
+
 ## 2026-11-28 · PR #186 构建与远端发布回归
 
 基于 `24d847b`，在 Linux 和 Rust 1.98.0 下复现无特性构建的未使用代码错误。

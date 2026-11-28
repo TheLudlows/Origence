@@ -130,7 +130,7 @@ Each deployment has one shared knowledge catalog. A workspace writer can submit 
 | `GET /admin/deployment/global-knowledge/{publication_id}` | Inspect submitted text, source workspace, and exact version |
 | `POST /admin/deployment/global-knowledge/{publication_id}/review` | Set `decision` to `approve`, `reject`, or `withdraw` |
 
-Approval revalidates the original version. The approved copy survives updates or deletion of the private original. Withdrawal immediately blocks new reads, recall, and replay of prepared Run context that cites the release. Shared citations use independent IDs and UTF-8 byte ranges within the published text. Private files, turns, and source IDs retain their workspace authorization.
+Approval revalidates the original version. The approved copy survives updates or deletion of the private original. Withdrawal immediately blocks new reads, recall, and replay of prepared Run context that cites the release. Shared content and its within-chunk AND keyword index reside in a dedicated AnySeek collection. Origence constrains ranking to approved versions and rechecks review state before returning results. Shared citations use independent IDs and UTF-8 byte ranges within the published text. Private files, turns, and source IDs retain their workspace authorization.
 
 `search`, `resolve`, the knowledge route of `context`, and Run context merge workspace results with global keyword matches within the requested limits. Global knowledge uses keyword matching in vector and hybrid modes. Search and resolve report `scope`, and context uses `global_knowledge` citations. MCP `context_get` accepts `scope: "global"` with a global publication ID.
 

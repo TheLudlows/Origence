@@ -72,10 +72,33 @@ async fn global_publication_is_pinned_moderated_and_recalled_across_tenants() {
             .await,
         Err(AppError::Invalid(_))
     ));
+    let backend = crate::support::fixture(dir.path(), None);
+    backend.lose_next_write();
+    assert!(
+        service
+            .submit_global_knowledge(&author, asset, 1)
+            .await
+            .is_err()
+    );
+    assert!(
+        service
+            .global_review_catalog(&admin, "pending", Uuid::nil(), 10)
+            .await
+            .unwrap()["items"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    let attempts = backend.posts();
     let submission = service
         .submit_global_knowledge(&author, asset, 1)
         .await
         .unwrap();
+    assert_eq!(
+        backend.posts(),
+        attempts,
+        "retry must reuse the native write"
+    );
     let publication = id(&submission, "publication_id");
     assert_eq!(submission["state"], "pending");
     assert_eq!(
@@ -239,6 +262,26 @@ async fn global_publication_is_pinned_moderated_and_recalled_across_tenants() {
             .unwrap()["content"],
         text
     );
+    let native_chunk = backend
+        .snapshot_records()
+        .into_iter()
+        .find(|record| record["document"]["source_id"] == json!(publication))
+        .unwrap();
+    let chunk = id(&native_chunk["document"], "chunk_id");
+    backend.mutate_payload(chunk, |payload| {
+        payload["content"] = json!("unverified text")
+    });
+    assert!(matches!(
+        service.global_knowledge(&reader, publication).await,
+        Err(AppError::Unavailable(_))
+    ));
+    assert!(matches!(
+        service.search(&reader, search.clone()).await,
+        Err(AppError::Unavailable(_))
+    ));
+    backend.mutate_payload(chunk, |payload| {
+        *payload = native_chunk["document"]["payload"].clone()
+    });
     service
         .review_global_knowledge(&admin, publication, GlobalKnowledgeDecision::Withdraw)
         .await
