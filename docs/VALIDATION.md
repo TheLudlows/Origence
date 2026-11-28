@@ -7,6 +7,14 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · Windows Agent 接入的 Key 存储
+
+基于 main `eb37e8f8fd401f1f24d7ef3db55238568dd8e7c9`。Linux、Node 24.22.1 和回环 HTTP/MCP
+夹具运行安装入口。模拟 Windows 用户环境覆盖无参数重装、旧记录原文清理、换 Key 的确认规则、
+卸载清除安装器设置的值及保留用户设置的值。Linux 的接入、重装和卸载也通过合成夹具。
+Rust 1.98.0 格式和全目标严格 Clippy、Node 和 Python 语法检查、`git diff --check` 通过。
+原生 Windows 安装器冒烟已补充对应断言，待在 Windows 运行。
+
 ## 2026-11-28 · 控制台登录切换与浅色样式
 
 基于 main `91479ea`，Linux 上的 Node 24.22.1 通过 `npm --prefix ui run check` 和 34 项 UI 测试。
