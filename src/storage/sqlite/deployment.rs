@@ -1,7 +1,7 @@
 //! Explicit deployment-wide inspection and moderation authority.
 use super::*;
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 fn admin_actor_id(token_hash: &str) -> Uuid {
     // Administrator receipts use a distinct UUID version from workspace keys.
     // Derive the actor from the verified fingerprint without storing the token.
@@ -14,7 +14,7 @@ fn admin_actor_id(token_hash: &str) -> Uuid {
     uuid::Builder::from_custom_bytes(bytes).into_uuid()
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> StorageResult<Uuid> {
     if token.len() != 73 || !token.starts_with("oc_admin_") {
         return Err(StorageError::Unauthorized);
@@ -33,7 +33,7 @@ pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> Storage
     Ok(admin_actor_id(&fingerprint))
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) async fn live_admin_in_scope(
     conn: &mut Connection,
     actor: Uuid,
@@ -77,13 +77,13 @@ impl SqliteStore {
         Ok(token)
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn authenticate_deployment_admin(&self, token: &str) -> StorageResult<()> {
         let mut conn = self.pool.acquire().await.map_err(sqlite_err)?;
         require_admin(&mut conn, token).await.map(|_| ())
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn deployment_workspaces(
         &self,
         token: &str,
@@ -114,7 +114,7 @@ impl SqliteStore {
     }
 
     /// Begin a read transaction for the selected workspace.
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn begin_deployment_inspection(
         &self,
         token: &str,
@@ -123,7 +123,7 @@ impl SqliteStore {
         self.deployment_workspace_tx(token, workspace, false).await
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn authorize_deployment_workspace(
         &self,
         token: &str,
@@ -139,7 +139,7 @@ impl SqliteStore {
         Ok(auth)
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     async fn deployment_workspace_tx(
         &self,
         token: &str,
@@ -170,7 +170,7 @@ impl SqliteStore {
         })
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn provision_deployment_workspace(
         &self,
         token: &str,
@@ -219,7 +219,7 @@ impl SqliteStore {
         Ok(json!({"workspace_id":workspace,"name":name.trim(),"created":true,"key":key}))
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn deployment_workspace_keys(
         &self,
         token: &str,
@@ -239,7 +239,7 @@ impl SqliteStore {
         Ok(page)
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn rotate_deployment_workspace_key(
         &self,
         token: &str,
@@ -254,7 +254,7 @@ impl SqliteStore {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl SqliteTx {
     pub(crate) async fn inspection_sessions(
         &mut self,

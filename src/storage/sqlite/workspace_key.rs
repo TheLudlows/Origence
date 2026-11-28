@@ -14,7 +14,7 @@ pub(super) async fn has_workspace_key(conn: &mut Connection, scope: Scope) -> St
 
 /// Jobs submitted with a single workspace key finish under its current
 /// credential. Member keys keep their original authority during transition.
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(super) async fn job_execution_key(
     conn: &mut Connection,
     scope: Scope,
@@ -77,7 +77,7 @@ async fn insert_workspace_key(
 }
 
 impl SqliteStore {
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn job_execution_key(
         &self,
         scope: Scope,

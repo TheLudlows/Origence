@@ -78,7 +78,7 @@ pub enum Error {
 }
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[cfg(all(test, feature = "local-storage"))]
+#[cfg(all(test, feature = "host"))]
 #[derive(Default)]
 struct TestCounts {
     transactions: std::sync::atomic::AtomicUsize,
@@ -93,7 +93,7 @@ struct PoolState {
     cleanup_failed: AtomicBool,
     read_only: bool,
     lifetime_guard: Mutex<Option<Arc<dyn Send + Sync>>>,
-    #[cfg(all(test, feature = "local-storage"))]
+    #[cfg(all(test, feature = "host"))]
     counts: Arc<TestCounts>,
 }
 
@@ -129,7 +129,7 @@ impl Pool {
             cleanup_failed: AtomicBool::new(false),
             read_only,
             lifetime_guard: Mutex::new(None),
-            #[cfg(all(test, feature = "local-storage"))]
+            #[cfg(all(test, feature = "host"))]
             counts: Arc::default(),
         })))
     }
@@ -171,7 +171,7 @@ impl Pool {
 
     /// Per-pool test evidence: acknowledged begins and client driver calls.
     /// No query, timing threshold, production telemetry or persisted counter.
-    #[cfg(all(test, feature = "local-storage"))]
+    #[cfg(all(test, feature = "host"))]
     pub(crate) fn test_counts(&self) -> (usize, usize) {
         (
             self.0.counts.transactions.load(Ordering::Relaxed),
@@ -185,7 +185,7 @@ impl Pool {
         }
         let mut connection = self.acquire().await?;
         query(statement).execute(&mut *connection).await?;
-        #[cfg(all(test, feature = "local-storage"))]
+        #[cfg(all(test, feature = "host"))]
         self.0.counts.transactions.fetch_add(1, Ordering::Relaxed);
         connection.managed_transaction = true;
         Ok(Transaction { connection })
@@ -235,7 +235,7 @@ pub struct Connection {
     interrupted: bool,
     autocommit: bool,
     managed_transaction: bool,
-    #[cfg(all(test, feature = "local-storage"))]
+    #[cfg(all(test, feature = "host"))]
     counts: Arc<TestCounts>,
 }
 impl Connection {
@@ -308,7 +308,7 @@ impl Connection {
                 interrupted: false,
                 autocommit: true,
                 managed_transaction: false,
-                #[cfg(all(test, feature = "local-storage"))]
+                #[cfg(all(test, feature = "host"))]
                 counts: pool.counts.clone(),
             };
             let _ = ready.send(Ok(PoolConnection {
@@ -347,11 +347,11 @@ impl Connection {
         operation: impl FnOnce(&mut rusqlite::Connection) -> Result<T> + Send + 'static,
     ) -> Result<T> {
         let (reply, result) = oneshot::channel();
-        #[cfg(all(test, feature = "local-storage"))]
+        #[cfg(all(test, feature = "host"))]
         let counts = self.counts.clone();
         self.sender
             .send(Command::Run(Box::new(move |raw| {
-                #[cfg(all(test, feature = "local-storage"))]
+                #[cfg(all(test, feature = "host"))]
                 counts.calls.fetch_add(1, Ordering::Relaxed);
                 let result = operation(raw).map(|value| (value, raw.is_autocommit()));
                 let _ = reply.send(result);

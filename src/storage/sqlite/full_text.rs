@@ -85,7 +85,7 @@ impl SqliteTx {
         Ok(self.full_text_hits(&[key]).await?.remove(&key))
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn context_full_text_candidates(
         &mut self,
         generation: i64,

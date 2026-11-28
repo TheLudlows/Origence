@@ -2,7 +2,7 @@
 //!
 //! Labels describe source messages, never authority. Input order is authoritative;
 //! optional timestamps are signed Unix milliseconds and are never synthesized.
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod service;
 
 use crate::{

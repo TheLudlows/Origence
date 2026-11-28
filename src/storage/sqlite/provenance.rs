@@ -82,7 +82,7 @@ impl SqliteTx {
         self.file_exists(id).await
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn retract_content_source(&mut self, id: Uuid) -> StorageResult<u64> {
         self.retract_event_in_scope(id, false).await
     }

@@ -4,7 +4,7 @@ use super::*;
 
 impl SqliteTx {
     /// Retry uses the same execution authority as the worker.
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn require_job_creator_write(&mut self, job: Uuid) -> StorageResult<()> {
         let job_authority: Option<(Uuid, bool)> = sqlite_db::query_as(
             "SELECT created_by,operation='extract' AND json_type(payload,'$.archive_turn') IS 'text'
@@ -61,7 +61,7 @@ impl SqliteTx {
         if let Some(role) = role {
             return Ok(role);
         }
-        #[cfg(feature = "local-storage")]
+        #[cfg(feature = "host")]
         if super::deployment::live_admin_in_scope(&mut self.tx, principal_id, scope).await? {
             return Ok("admin".into());
         }

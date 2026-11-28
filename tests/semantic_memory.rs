@@ -1,4 +1,4 @@
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 use origence::{
     error::AppError,
     models::Models,

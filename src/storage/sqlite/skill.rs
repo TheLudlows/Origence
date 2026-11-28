@@ -143,7 +143,7 @@ impl SqliteTx {
             return Err(StorageError::Forbidden);
         }
         if input.reviewer_id.is_nil() {
-            #[cfg(feature = "local-storage")]
+            #[cfg(feature = "host")]
             {
                 let configured: bool = sqlite_db::query_scalar(
                     "SELECT EXISTS(SELECT 1 FROM oc_deployment_admin WHERE singleton=1)",
@@ -155,7 +155,7 @@ impl SqliteTx {
                     return Err(StorageError::Forbidden);
                 }
             }
-            #[cfg(not(feature = "local-storage"))]
+            #[cfg(not(feature = "host"))]
             return Err(StorageError::Forbidden);
         } else if super::workspace_key::has_workspace_key(&mut self.tx, self.scope).await?
             || !Permission::Write
@@ -204,14 +204,14 @@ impl SqliteTx {
         if !reviewer.is_nil() {
             return Ok(self.principal_id == reviewer);
         }
-        #[cfg(feature = "local-storage")]
+        #[cfg(feature = "host")]
         return super::deployment::live_admin_in_scope(&mut self.tx, self.principal_id, self.scope)
             .await;
-        #[cfg(not(feature = "local-storage"))]
+        #[cfg(not(feature = "host"))]
         Ok(false)
     }
 
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn deployment_skill_reviews(
         &mut self,
         after: Uuid,

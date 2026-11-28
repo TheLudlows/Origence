@@ -148,7 +148,7 @@ async fn ordinary_commands_keep_principal_isolation_and_receipts_require_writer(
     tx.rollback().await.unwrap();
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod retry_tests {
     use super::*;
     use origence::{error::AppError, models::Models, types::KnowledgeInput};

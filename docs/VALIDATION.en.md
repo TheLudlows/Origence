@@ -95,6 +95,26 @@ protocol negotiation, tool contracts, and revocation.
 Node type checking and 34 UI tests passed. Chromium 156.0.8078.79 passed `check-console-session-browser.cjs`
 and `check-key-management-browser.cjs` with loopback services and synthetic data, covering the administrator
 label, sign-in, peer workspace creation, key rotation, and global knowledge review. Native Windows is pending.
+## 2026-11-28 · Host build feature simplification
+
+Based on main `496960f`, using Linux and Rust 1.98.0. `cargo clippy --locked --offline
+--all-targets -- -D warnings` passed for the default, `host`-only, and `sqlite`-only builds.
+The latter two used `--no-default-features --features host` or
+`--no-default-features --features sqlite`. Format and diff checks passed. `cargo tree`
+confirmed that the default links the AnySeek SDK and SQLite, `host` alone links SQLite,
+and the core build with default features disabled has no SQLite dependency.
+
+- `cargo test --locked --offline --no-default-features --features host --test anyseek`
+  passed 7 tests and ignored 8. The remote host rejected missing remote configuration and `--local`.
+- `cargo test --locked --offline --test anyseek` passed 6 tests and ignored 8.
+  `python3 tools/anyseek_smoke.py --embedded --binary <origence>` passed and covered
+  embedded AnySeek publication, diagnostics, replay, restart, and refusal to recreate a lost Catalog.
+- `cargo test --locked --offline --no-default-features --features sqlite --test identity-layout`
+  ignored all 3 diagnostics by default. Appending `identity_layout_before_after -- --ignored --exact`
+  ran the selected diagnostic successfully.
+
+A standalone AnySeek server, the Docker image, and native Windows builds were outside this local run.
+
 ## 2026-11-28 · Global knowledge retrieval review
 
 Based on `14278f4`, using Linux and Rust 1.98.0. The HTTP protocol fixture verified

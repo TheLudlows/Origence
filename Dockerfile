@@ -11,7 +11,7 @@ FROM build-inputs AS build
 # Bound Cargo compilation to control memory use.
 ARG BUILD_JOBS=1
 # The cloud host connects to an independently deployed AnySeek service.
-RUN cargo build --release --locked --no-default-features --features local-storage --bin origence -j ${BUILD_JOBS}
+RUN cargo build --release --locked --no-default-features --features host --bin origence -j ${BUILD_JOBS}
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \

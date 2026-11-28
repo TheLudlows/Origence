@@ -1,5 +1,5 @@
 //! Opt-in, bounded, read-only context. Visibility is not factual verification.
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(any(feature = "host", test))]
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
@@ -72,7 +72,7 @@ pub(crate) fn validate_applicability_context(context: &[String]) -> Result<(), &
     Ok(())
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(crate) fn conditions_match(conditions: &[String], context: &[String]) -> bool {
     !conditions.is_empty()
         && conditions
@@ -239,7 +239,7 @@ pub struct EvidenceItem {
     pub archive_roundtrip: String,
     /// Internal deterministic rule eligibility, never inferred from prose.
     #[serde(skip)]
-    #[cfg_attr(not(any(feature = "local-storage", test)), allow(dead_code))]
+    #[cfg_attr(not(any(feature = "host", test)), allow(dead_code))]
     pub(crate) single_valued: bool,
 }
 
@@ -286,14 +286,14 @@ pub struct EvidenceBundle {
     pub routes: Vec<RouteAccounting>,
 }
 
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(any(feature = "host", test))]
 struct Unit {
     route: EvidenceRoute,
     items: Vec<EvidenceItem>,
     conflict: Option<EvidenceConflict>,
 }
 
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(any(feature = "host", test))]
 fn units(mut items: Vec<EvidenceItem>) -> Vec<Unit> {
     // Only duplicate exact typed locations coalesce; equal prose never does.
     let mut positions = BTreeMap::new();
@@ -397,7 +397,7 @@ fn units(mut items: Vec<EvidenceItem>) -> Vec<Unit> {
     result
 }
 
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(any(feature = "host", test))]
 fn block(unit: &Unit) -> String {
     let mut text = String::new();
     if let Some(conflict) = &unit.conflict {
@@ -412,7 +412,7 @@ fn block(unit: &Unit) -> String {
     text
 }
 
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(any(feature = "host", test))]
 fn append_item(text: &mut String, item: &EvidenceItem) {
     // JSON escaping keeps embedded newlines/quotes in evidence metadata data.
     let metadata = serde_json::json!({
@@ -431,7 +431,7 @@ fn append_item(text: &mut String, item: &EvidenceItem) {
     ));
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(crate) fn restore_rendered_context(bundle: &EvidenceBundle) -> String {
     let mut text = String::new();
     let mut emitted = BTreeSet::new();
@@ -450,7 +450,7 @@ pub(crate) fn restore_rendered_context(bundle: &EvidenceBundle) -> String {
     text
 }
 
-#[cfg(any(feature = "local-storage", test))]
+#[cfg(any(feature = "host", test))]
 pub(crate) fn render(bundle: &mut EvidenceBundle, candidates: Vec<EvidenceItem>) {
     let mut queues: BTreeMap<EvidenceRoute, std::collections::VecDeque<Unit>> = BTreeMap::new();
     for unit in units(candidates) {

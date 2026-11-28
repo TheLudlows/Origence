@@ -1,5 +1,5 @@
 //! Public library upload/job/search regression for isolated workspaces.
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 use origence::service::Service;
 use origence::{
     error::AppError,

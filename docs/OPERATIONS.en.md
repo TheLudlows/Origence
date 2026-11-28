@@ -87,7 +87,7 @@ export OC_ANYSEEK_URL=https://anyseek.example.internal
 docker compose up --build -d host
 ```
 
-On bare-metal cloud hosts, build the remote-only binary with `cargo build --release --locked --no-default-features --features local-storage --bin origence`. The standalone AnySeek revision checked by CI is `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`.
+On bare-metal cloud hosts, build the remote-only binary with `cargo build --release --locked --no-default-features --features host --bin origence`. The standalone AnySeek revision checked by CI is `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`.
 
 Each request takes `tenant_id` from the authenticated server-side Scope and sends it as `X-AnySeek-Tenant`. The `workspace_id` maps to `ws_<去掉连字符的 UUID>` (the UUID without hyphens). Each workspace has one collection. Separate workspaces within one tenant use different collections and separate tenants use different namespaces. Clients and models cannot set AnySeek routing or service credentials. Origence user keys, private sessions, candidate scope filtering, and final authorization, source, and version checks still apply.
 

@@ -1,7 +1,7 @@
 //! Cross-store ledger round-trip (M4): a pending write is registered on the
 //! SQLite ledger, applied idempotently to an AnySeek protocol peer with attached graph, confirmed, and a
 //! reconcile pass leaves it committed without duplicating (A2.6).
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 
 use origence::storage::anyseek::{AnySeekFullTextStore, operation_epoch};
 use origence::storage::ledger::{LedgerEntry, LedgerKey, Surface};

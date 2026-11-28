@@ -18,7 +18,7 @@ features，仅启用 bundled），不引入 ORM 或独立异步数据库依赖�
 `SqliteStore` / `SqliteTx` 是唯一的本地关系实现；引擎标记为 `origence-sqlite-v2`，
 没有旧引擎的适配器、别名或回退路径。
 
-SQLite 是可选库能力。`--no-default-features` 的核心接口、解析、模型、Blob 和远端 AnySeek 适配器不编译或访问 SQLite。`--features sqlite` 启用权威适配器，`local-storage` 组合仅连接远端 AnySeek 的完整宿主及 SQLite，默认 `embedded-anyseek` 增加本地 SDK。完整宿主仍用 SQLite 保存原始来源事件、权限、归属、版本指针、幂等、持久任务及恢复事实。AnySeek 保存已发布正文和摘要文本。
+SQLite 是可选库能力。`--no-default-features` 的核心接口、解析、模型、Blob 和远端 AnySeek 适配器不编译或访问 SQLite。`--features sqlite` 启用权威适配器，`host` 启用完整宿主及 SQLite。关闭默认特性后只启用 `host`，宿主连接独立 AnySeek。默认 `embedded-anyseek` 还包含本地 SDK。完整宿主仍用 SQLite 保存原始来源事件、权限、归属、版本指针、幂等、持久任务及恢复事实。AnySeek 保存已发布正文和摘要文本。
 
 请求只读取实际参与操作的元数据：空批次和空检索词直接返回空结果；缺少上游候选时，
 不查询下游索引、Summary、来源或 owner。Learning 不存在、前置条件不成立或父任务

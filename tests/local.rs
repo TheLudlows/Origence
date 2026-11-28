@@ -1,16 +1,16 @@
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod catalog;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod client_hooks;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod content_storage;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod support;
 // One integration executable avoids repeatedly linking the native engines.
 mod evidence_bundle;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod foundation_http;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod global_knowledge;
 mod identity_check_cli;
 mod identity_vector_regression;
@@ -35,24 +35,24 @@ mod sqlite_store;
 mod sqlite_visibility;
 mod storage_contract;
 mod storage_recovery;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod workspace_access;
 mod workspace_commands;
 mod workspace_isolation;
 mod workspace_schema_rejection;
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod pdf_fixture;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod retrieval_diagnostics;
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod mcp_http;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod mcp_runs;
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod run_pdf_source;
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod turn_sync;

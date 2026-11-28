@@ -1,6 +1,6 @@
 //! S0 service-level regression with real SQLite authority and an AnySeek protocol fixture and loopback-only embeddings.
 //! Fixed vectors prove candidate filtering, not semantic retrieval quality.
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 
 use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use origence::{
