@@ -110,6 +110,8 @@ The administrator console rotates the single key of the selected workspace.
 
 The following paths are relative to `/admin/deployment/workspaces/{id}`. The `{id}` in the path selects the workspace. Content and job writes use `Idempotency-Key`. Skill retries use the review ID and packet digest. Audit entries record the administrator credential's internal identity, which changes on administrator credential rotation.
 
+Accepted jobs continue in their original workspace after administrator credential rotation and retain their original submitter in the job record. The replaced credential cannot authenticate new requests. Cancellation, source withdrawal, and version checks still apply.
+
 | Method and path | Operation |
 | --- | --- |
 | `POST /memories/identified`, `POST /memories/semantic` | Create or update memories with explicit identities |

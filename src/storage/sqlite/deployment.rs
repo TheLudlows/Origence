@@ -13,6 +13,19 @@ fn admin_actor_id(token_hash: &str) -> Uuid {
     uuid::Builder::from_custom_bytes(bytes).into_uuid()
 }
 
+pub(super) fn is_admin_actor(actor: Uuid) -> bool {
+    actor.get_version_num() == 8
+}
+
+pub(super) async fn current_admin_actor(conn: &mut Connection) -> StorageResult<Option<Uuid>> {
+    let fingerprint: Option<String> =
+        sqlite_db::query_scalar("SELECT token_hash FROM oc_deployment_admin WHERE singleton=1")
+            .fetch_optional(conn)
+            .await
+            .map_err(sqlite_err)?;
+    Ok(fingerprint.map(|hash| admin_actor_id(&hash)))
+}
+
 pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> StorageResult<Uuid> {
     if token.len() != 73 || !token.starts_with("oc_admin_") {
         return Err(StorageError::Unauthorized);
@@ -36,15 +49,7 @@ pub(super) async fn live_admin_in_scope(
     actor: Uuid,
     scope: Scope,
 ) -> StorageResult<bool> {
-    if actor.get_version_num() != 8 {
-        return Ok(false);
-    }
-    let fingerprint: Option<String> =
-        sqlite_db::query_scalar("SELECT token_hash FROM oc_deployment_admin WHERE singleton=1")
-            .fetch_optional(&mut *conn)
-            .await
-            .map_err(sqlite_err)?;
-    if !fingerprint.is_some_and(|hash| admin_actor_id(&hash) == actor) {
+    if !is_admin_actor(actor) || current_admin_actor(&mut *conn).await? != Some(actor) {
         return Ok(false);
     }
     sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_workspaces WHERE tenant_id=? AND id=?)")

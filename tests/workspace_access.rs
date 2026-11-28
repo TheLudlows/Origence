@@ -415,7 +415,35 @@ async fn deployment_admin_content_writes_use_workspace_scope_and_audit_actor() {
             ("source.logical_delete".into(), actor.id)
         ]
     );
-    store.rotate_deployment_admin().await.unwrap();
+    let pending = operator
+        .call(
+            Method::POST,
+            &publish,
+            Some(&input),
+            Some("queued-before-rotation"),
+        )
+        .await
+        .unwrap();
+    let retry = operator
+        .call(
+            Method::POST,
+            &publish,
+            Some(&input),
+            Some("retry-before-rotation"),
+        )
+        .await
+        .unwrap();
+    let retry_path = format!("{a}/jobs/{}", retry["job_id"].as_str().unwrap());
+    operator
+        .call(
+            Method::POST,
+            &format!("{retry_path}/cancel"),
+            None,
+            Some("cancel"),
+        )
+        .await
+        .unwrap();
+    let replacement = store.rotate_deployment_admin().await.unwrap();
     assert!(matches!(
         service.job(&actor, Uuid::parse_str(job).unwrap()).await,
         Err(AppError::Forbidden)
@@ -424,6 +452,49 @@ async fn deployment_admin_content_writes_use_workspace_scope_and_audit_actor() {
         operator.call(Method::GET, &job_path, None, None).await,
         Err(AppError::Unauthorized)
     ));
+    let operator = HostClient::new(&base, replacement).unwrap();
+    assert_eq!(
+        operator
+            .call(
+                Method::POST,
+                &format!("{retry_path}/retry"),
+                None,
+                Some("retry")
+            )
+            .await
+            .unwrap()["state"],
+        "pending"
+    );
+    while origence::worker::process_next(&service).await.unwrap() {}
+    for receipt in [pending, retry] {
+        let job_id = receipt["job_id"].as_str().unwrap();
+        assert_eq!(
+            operator
+                .call(Method::GET, &format!("{a}/jobs/{job_id}"), None, None)
+                .await
+                .unwrap()["state"],
+            "completed"
+        );
+        let creator: Uuid = origence::storage::sqlite_db::query_scalar(
+            "SELECT created_by FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
+        )
+        .bind(first.tenant_id)
+        .bind(first.workspace_id)
+        .bind(job_id.parse::<Uuid>().unwrap())
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert_eq!(creator, actor.id);
+        let path = format!("/v1/assets/{}", receipt["asset_id"].as_str().unwrap());
+        assert_eq!(
+            agent.call(Method::GET, &path, None, None).await.unwrap()["content"],
+            "Original policy"
+        );
+        assert!(matches!(
+            other_agent.call(Method::GET, &path, None, None).await,
+            Err(AppError::NotFound)
+        ));
+    }
     host.abort();
     service.engine.shutdown().await.unwrap();
 }

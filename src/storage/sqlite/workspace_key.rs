@@ -1,8 +1,8 @@
 //! Provisioning for workspaces with one credential and one stable identity.
 use super::*;
 
-/// Jobs submitted with a single workspace key finish under its current
-/// credential. Member keys keep their original authority during transition.
+/// Resolve execution authority from a job's persisted creator or the worker's
+/// current actor on retry. Never use request-supplied actor IDs here.
 #[cfg(feature = "host")]
 pub(super) async fn job_execution_key(
     conn: &mut Connection,
@@ -10,6 +10,13 @@ pub(super) async fn job_execution_key(
     original: Uuid,
     archive_extraction: bool,
 ) -> StorageResult<Uuid> {
+    if !archive_extraction && super::deployment::is_admin_actor(original) {
+        // This UUID namespace is reserved for verified deployment admins at
+        // admission. Keep the job's scope and recorded submitter across rotation.
+        return super::deployment::current_admin_actor(conn)
+            .await?
+            .ok_or(StorageError::Forbidden);
+    }
     let submitted: Option<(Uuid, bool)> = sqlite_db::query_as(
         "SELECT logical_key_id,revoked FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=?",
     )
@@ -20,12 +27,7 @@ pub(super) async fn job_execution_key(
     .await
     .map_err(sqlite_err)?;
     let Some((logical, revoked)) = submitted else {
-        // Only a workspace credential can submit automatic archive extraction.
-        return if archive_extraction {
-            Err(StorageError::Forbidden)
-        } else {
-            Ok(original)
-        };
+        return Err(StorageError::Forbidden);
     };
     if !revoked {
         return Ok(original);
