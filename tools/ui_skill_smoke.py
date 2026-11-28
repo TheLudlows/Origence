@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 import uuid
 
-from native_fixture import workspace as seed_workspace
+from native_fixture import admin_env, workspace as seed_workspace
 from mcp_smoke import Host, isolated_env, require, sanitized
 from ui_trace_smoke import QUERY, publish_policy
 
@@ -21,19 +21,13 @@ def main():
     with tempfile.TemporaryDirectory(prefix="origence-run-skill-") as temporary:
         root = Path(temporary)
         env = isolated_env(temporary)
-        workspace = seed_workspace(env, "Synthetic Skill workspace")
-        unrelated = seed_workspace(env, "Unrelated Skill workspace")
-        admin = workspace["token"]
-        forbidden = [admin, unrelated["token"]]
-        with Host(str(binary), env, admin, forbidden, serve_args=("--local",)) as host:
-            keys = {}
-            for name, role in (("writer", "writer"), ("reviewer", "writer"), ("reader", "reader")):
-                keys[name] = host.request("/admin/keys", {
-                    "workspace_id": workspace["workspace_id"], "role": role,
-                })
-                forbidden.append(keys[name]["token"])
+        workspace = seed_workspace(env, "Synthetic Skill workspace", single_key=True)
+        unrelated = seed_workspace(env, "Unrelated Skill workspace", single_key=True)
+        admin = admin_env(env)
+        forbidden = [admin, workspace["token"], unrelated["token"]]
+        with Host(str(binary), env, workspace["token"], forbidden, serve_args=("--local",)) as host:
             policy = publish_policy(host, 1)
-            data = {"api": host.base, "workspace": workspace["workspace_id"], "keys": keys,
+            data = {"api": host.base, "workspace": workspace["workspace_id"], "key": workspace["token"],
                     "admin": admin, "outsider": unrelated["token"], "query": QUERY,
                     "source": policy["source_event_id"], "run": str(uuid.uuid4())}
             result = subprocess.run(["node", str(BROWSER_CHECK)], input=json.dumps(data),

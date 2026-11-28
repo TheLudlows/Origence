@@ -75,9 +75,6 @@ pub struct SkillPackage {
 #[serde(deny_unknown_fields)]
 pub struct SkillReviewInput {
     pub revision: u32,
-    /// Omit to submit to the administrator of the selected workspace.
-    #[serde(default, skip_serializing_if = "Uuid::is_nil")]
-    pub reviewer_id: Uuid,
     pub target: SkillTarget,
     /// Explicitly selected, redacted explanation; not the original private sources.
     pub basis: String,

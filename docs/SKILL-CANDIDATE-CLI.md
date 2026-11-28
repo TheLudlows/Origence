@@ -101,11 +101,6 @@ origence-skill review REVIEW_UUID
 origence-skill publish REVIEW_UUID EXACT_PACKET_DIGEST
 ```
 
-In a legacy multi-key workspace, add `--reviewer-id REVIEWER_CREDENTIAL_UUID` to
-appoint a reviewer. The appointed reviewer uses their own credential to run
-`origence-skill review REVIEW_UUID`, then `origence-skill decide REVIEW_UUID EXACT_PACKET_DIGEST --approve`
-or `--reject`. Changing an immutable decision requires a new review ID.
-
 Submit rechecks the current revision at the server after reading it; a concurrent
 edit fails closed. The packet contains only the generated package, selected basis
 and review/target identity. Review does not grant raw archive access. Publish is

@@ -65,8 +65,6 @@ origence-skill review REVIEW_UUID
 origence-skill publish REVIEW_UUID EXACT_PACKET_DIGEST
 ```
 
-尚在使用多 Key 的旧工作区可在提交时指定 `--reviewer-id REVIEWER_CREDENTIAL_UUID`。获指定的有效审阅者使用自己的凭据运行 `origence-skill review REVIEW_UUID`，再运行 `origence-skill decide REVIEW_UUID EXACT_PACKET_DIGEST --approve` 或 `--reject`。决定不可变，改变决定须新建审核 ID。
-
 提交时，服务端在读取后再次检查当前修订。并发编辑会阻止提交。审阅包只包含生成的包、选定依据以及审阅和目标标识。审阅不授予访问原始归档的权限。发布是独立步骤，再次检查当前修订、凭据、来源与摘要权威。已审阅方法在显式发布前仍是提议，其指令不授予工具执行权限，也不能证明自报结果真实。
 
 ```sh

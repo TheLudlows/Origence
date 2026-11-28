@@ -111,7 +111,7 @@ export function runSkillDrafting(run: string, ctx: ViewContext) {
       if (signal.aborted) return;
       const candidateId = id ?? crypto.randomUUID();
       loadingForm.hidden = true;
-      editCandidate(body, candidateId, { kind: "run", ...prefix }, revision, text, signal, ctx.role === "workspace", (keepId) => {
+      editCandidate(body, candidateId, { kind: "run", ...prefix }, revision, text, signal, (keepId) => {
         reset();
         if (keepId) existing.value = candidateId;
         (origin.isConnected && !origin.hidden ? origin : existing).focus();
@@ -142,7 +142,7 @@ export function runSkillDrafting(run: string, ctx: ViewContext) {
 
 function editCandidate(
   root: HTMLElement, id: string, source: RunSource, revision: number,
-  initial: DraftText | undefined, signal: AbortSignal, administratorReview: boolean, close: (keepId: boolean) => void,
+  initial: DraftText | undefined, signal: AbortSignal, close: (keepId: boolean) => void,
 ) {
   const name = input("例如 verify-result", initial?.name);
   name.required = true;
@@ -170,7 +170,6 @@ function editCandidate(
   });
   const candidateId = idInput(id);
   candidateId.readOnly = true;
-  const reviewer = administratorReview ? null : idInput();
   const skill = idInput(crypto.randomUUID());
   const version = input("", "1", "number");
   version.required = true;
@@ -192,13 +191,11 @@ function editCandidate(
   let review: { fingerprint: string; id: string; submitted: boolean } | undefined;
   const dirty = () => JSON.stringify(read()) !== snapshot;
   const reviewFingerprint = () => JSON.stringify([
-    revision, reviewer?.value.toLowerCase(), skill.value.toLowerCase(), version.valueAsNumber,
+    revision, skill.value.toLowerCase(), version.valueAsNumber,
   ]);
   const fields = [name, description, steps, basis, notes];
   function update() {
-    for (const control of [...fields, disclosure, reviewer, skill, version, dismiss]) {
-      if (control) control.disabled = busy;
-    }
+    for (const control of [...fields, disclosure, skill, version, dismiss]) control.disabled = busy;
     save.disabled = busy || (revision > 0 && !dirty());
     send.disabled = busy || revision === 0 || dirty() || !disclosure.checked ||
       (review?.submitted === true && review.fingerprint === reviewFingerprint());
@@ -236,7 +233,7 @@ function editCandidate(
     activity.textContent = first ? "已保存修订 1。" : `已保存修订 ${revision}，旧批准失效。`;
   }), field("Skill 名称", name), field("描述", description), field("方法步骤", steps),
   field("选定依据（审阅者可见）", basis), field("私有备注（可选）", notes),
-  el("label", "", disclosure, reviewer ? " 我确认可向指定审阅者披露方法和选定依据" : " 我确认可向管理员披露方法和选定依据"), save);
+  el("label", "", disclosure, " 我确认可向管理员披露方法和选定依据"), save);
   const submission = form(() => perform(async () => {
     if (revision === 0 || dirty() || !disclosure.checked) return;
     const fingerprint = reviewFingerprint();
@@ -245,7 +242,7 @@ function editCandidate(
     const scope = await api.get<{ tenant_id: string; workspace_id: string }>("/v1/whoami", signal);
     const packet = await api.post<{ review_id: string; digest: string }>(
       `/v1/skill-candidates/${id}/reviews/${review.id}`, {
-        ...(reviewer && { reviewer_id: reviewer.value.toLowerCase() }), revision, basis: savedBasis,
+        revision, basis: savedBasis,
         target: { tenant_id: scope.tenant_id, workspace_id: scope.workspace_id,
           skill_id: skill.value.toLowerCase(), version: version.valueAsNumber },
       }, signal,
@@ -256,8 +253,8 @@ function editCandidate(
     receipt.replaceChildren(el("p", "", `修订 ${revision} 已提交审阅。`),
       field("审阅 ID", Object.assign(idInput(packet.review_id), { readOnly: true })),
       el("p", "code", `审阅包摘要 ${packet.digest}`),
-      el("p", "muted", reviewer ? "指定审阅者可使用审阅 ID 在 Skill CLI 中查看审阅包。" : "管理员可在此工作区的 Skill 审核中查看审阅包。"));
-  }), reviewer && field("审阅者凭据 ID", reviewer), field("目标 Skill ID", skill), field("版本号", version), send);
+      el("p", "muted", "管理员可在此工作区的 Skill 审核中查看审阅包。"));
+  }), field("目标 Skill ID", skill), field("版本号", version), send);
   editor.addEventListener("input", (event) => {
     if (event.target !== disclosure) disclosure.checked = false;
     update();
@@ -268,7 +265,7 @@ function editCandidate(
     el("p", "code", `固定 Run 前缀截至事件 ${source.through_sequence}\n${source.digest}`),
     el("p", "muted", "请手动填写已脱敏的依据。审阅者只能看到保存的方法和选定依据。"),
     field("候选 ID", candidateId), editor, activity,
-    el("h3", "", reviewer ? "指定审阅者及发布目标" : "提交管理员审核"), submission, receipt, error, dismiss,
+    el("h3", "", "提交管理员审核"), submission, receipt, error, dismiss,
   );
   update();
   name.focus();

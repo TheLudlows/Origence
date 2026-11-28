@@ -35,16 +35,10 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn deployment_workspace_keys(
-        &self,
-        token: &str,
-        workspace: Uuid,
-        after: Uuid,
-        limit: u32,
-    ) -> Result<Value> {
+    pub async fn deployment_workspace_key(&self, token: &str, workspace: Uuid) -> Result<Value> {
         self.engine
             .relational()
-            .deployment_workspace_keys(token, workspace, after, limit)
+            .deployment_workspace_key(token, workspace)
             .await
             .map_err(Into::into)
     }

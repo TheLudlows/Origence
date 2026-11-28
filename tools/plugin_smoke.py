@@ -232,12 +232,11 @@ class ScriptedClaude(BaseHTTPRequestHandler):
             self.wfile.write(f"event: {event['type']}\ndata: {json.dumps(event)}\n\n".encode())
 
 
-def claude_client(cli, project, env, forbidden, default, switched, selected_env, writer_probe):
+def claude_client(cli, project, env, forbidden, default, switched, selected_env):
     execute([cli, "plugin", "install", "origence", "--marketplace", str(REPO)], project, env, forbidden)
     require(not (project / ".mcp.json").exists(), "Unexpected project MCP file")
     claude_turn(cli, project, env, forbidden, default)
     claude_turn(cli, project, selected_env, forbidden, switched)
-    claude_turn(cli, project, selected_env, forbidden, writer_probe)
     execute([cli, "plugin", "uninstall", PLUGIN], project, env, forbidden)
     execute([cli, "plugin", "marketplace", "remove", "origence-tools"], project, env, forbidden)
 
@@ -318,6 +317,7 @@ def check_hook_run(host, summary, component, forbidden, workspace):
         tools = {event["tool"] for event in events if event["kind"] == "tool_reported"}
         require({"mcp__origence__context_search", "mcp__origence__context_get"} <= tools,
                 "Plugin did not observe its own allowlisted MCP calls")
+    return matches[0]["run_id"]
 
 
 def publish_probe(host, label):
@@ -365,7 +365,6 @@ def main():
                     default.session["key_id"] != switched.session["key_id"] and
                     default.session["session_id"] != switched.session["session_id"],
                     "Fixture did not isolate workspace keys and sessions")
-            writer_probe = switched
             env = child_environment()
             path_name = next(name for name in env if name.upper() == "PATH")
             if path_name != "PATH":
@@ -396,18 +395,29 @@ def main():
                 if label == "Codex":
                     run(cli, project, client_env, forbidden, default, switched, selected_env, host.base)
                 else:
-                    run(cli, project, client_env, forbidden, default, switched, selected_env, writer_probe)
+                    run(cli, project, client_env, forbidden, default, switched, selected_env)
                 require(not (project / ".mcp.json").exists() and not (project / ".codex/config.toml").exists(),
                         "Client project contains standalone MCP registration")
                 require(not (project / ".claude/settings.local.json").exists() and not (project / ".codex/hooks.json").exists(),
                         "Client project contains standalone Hook registration")
-                host.token = home["token"]
-                require(host.request("/v1/runs?limit=1")["items"] == [],
-                        "A hook reported into the other workspace")
                 host.token = alternate["token"]
                 summary = "Codex turn (hook metadata only)" if label == "Codex" else "Claude Code prompt (hook metadata only)"
                 component = "codex_hook" if label == "Codex" else "claude_code_hook"
-                check_hook_run(host, summary, component, forbidden, selected)
+                selected_run = check_hook_run(host, summary, component, forbidden, selected)
+                host.token = home["token"]
+                home_runs = host.request("/v1/runs?limit=10")["items"]
+                if label == "Codex":
+                    require(home_runs == [], "Codex reported a Run in the default workspace")
+                else:
+                    require(len(home_runs) == 1, "Claude should report one Run per workspace")
+                    home_run = check_hook_run(host, summary, component, forbidden, home["workspace_id"])
+                    require(home_run != selected_run, "Claude reused one Run across workspaces")
+                try:
+                    host.request(f"/v1/runs/{selected_run}")
+                    raise RuntimeError("The default workspace read the selected workspace's Run")
+                except urllib.error.HTTPError as error:
+                    require(error.code == 404, "Unexpected denial for the selected Run")
+                host.token = alternate["token"]
                 print(f"PASS {label}: install, separate default and selected workspace keys, historical v1 while v2 is published, "
                       "writer Run hook in selected workspace, uninstall", flush=True)
             print("PASS startup diagnostics, packaged hooks, and workspace isolation", flush=True)

@@ -18,21 +18,27 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
     };
-    store
-        .create_workspace(scope.tenant_id, scope.workspace_id, "foundation HTTP")
+    let writer = store
+        .create_key_workspace(scope, "foundation HTTP")
         .await
         .unwrap();
-    let writer = store.issue_key(scope, "writer").await.unwrap();
-    let reviewer = store.issue_key(scope, "writer").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let foreign = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    let foreign_key = store
+        .create_key_workspace(foreign, "other workspace")
+        .await
+        .unwrap();
+    let administrator = store.rotate_deployment_admin().await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let app = origence::api::router(service.clone());
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let client = |key: &str| HostClient::new(&base, key.to_string()).unwrap();
     let writer_client = client(&writer.token);
-    let reviewer_client = client(&reviewer.token);
-    let reader_client = client(&reader.token);
+    let reviewer_client = client(&administrator);
+    let foreign_client = client(&foreign_key.token);
     let run = Uuid::new_v4();
     let run_path = format!("/v1/runs/{run}");
     let create = json!({"run_id":run,"summary":"private original task"});
@@ -49,7 +55,7 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         session_from_mcp(&base, &writer.token, None).await
     );
     assert!(matches!(
-        reviewer_client
+        foreign_client
             .call(Method::GET, &run_path, None, None)
             .await,
         Err(origence::error::AppError::NotFound)
@@ -91,22 +97,9 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
     let skill = Uuid::new_v4();
     let review = Uuid::new_v4();
     let review_input = json!({
-        "revision":1, "reviewer_id":reviewer.key_id, "basis":"Redacted selected evidence",
+        "revision":1, "basis":"Redacted selected evidence",
         "target":{"tenant_id":scope.tenant_id,"workspace_id":scope.workspace_id,"skill_id":skill,"version":1}
     });
-    let mut reader_appointment = review_input.clone();
-    reader_appointment["reviewer_id"] = json!(reader.key_id);
-    assert!(matches!(
-        writer_client
-            .call(
-                Method::POST,
-                &format!("{candidate_path}/reviews/{}", Uuid::new_v4()),
-                Some(&reader_appointment),
-                None,
-            )
-            .await,
-        Err(origence::error::AppError::Forbidden)
-    ));
     writer_client
         .call(
             Method::POST,
@@ -117,12 +110,15 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         .await
         .unwrap();
     assert!(matches!(
-        reviewer_client
+        foreign_client
             .call(Method::GET, &candidate_path, None, None)
             .await,
         Err(origence::error::AppError::NotFound)
     ));
-    let review_path = format!("/v1/skill-reviews/{review}");
+    let review_path = format!(
+        "/admin/deployment/workspaces/{}/skill-reviews/{review}",
+        scope.workspace_id
+    );
     let packet = reviewer_client
         .call(Method::GET, &review_path, None, None)
         .await
@@ -153,15 +149,15 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
         .await
         .unwrap();
     assert!(matches!(
-        reader_client
+        foreign_client
             .call(
                 Method::POST,
-                &format!("{review_path}/publish"),
+                &format!("/v1/skill-reviews/{review}/publish"),
                 Some(&exact),
                 None,
             )
             .await,
-        Err(origence::error::AppError::Forbidden)
+        Err(origence::error::AppError::NotFound)
     ));
     let published = reviewer_client
         .call(
@@ -176,7 +172,7 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
     assert!(!published.to_string().contains("Redacted selected evidence"));
 
     let package_path = format!("/v1/skills/{skill}/versions/1/package");
-    let package = reader_client
+    let package = writer_client
         .call(Method::GET, &package_path, None, None)
         .await
         .unwrap();
@@ -473,11 +469,10 @@ async fn deployment_admin_provisions_and_rotates_only_single_workspace_keys() {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
     };
-    store
-        .create_workspace(member.tenant_id, member.workspace_id, "Members")
+    let member_key = store
+        .create_key_workspace(member, "Other workspace")
         .await
         .unwrap();
-    let member_admin = store.issue_key(member, "admin").await.unwrap();
     let admin = store.rotate_deployment_admin().await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -498,7 +493,7 @@ async fn deployment_admin_provisions_and_rotates_only_single_workspace_keys() {
     };
 
     assert_eq!(
-        create(&member_admin.token, "Independent")
+        create(&member_key.token, "Independent")
             .await
             .unwrap()
             .status(),
@@ -508,7 +503,7 @@ async fn deployment_admin_provisions_and_rotates_only_single_workspace_keys() {
         call(
             Method::PUT,
             &format!("/v1/workspaces/owned/{workspace}"),
-            &member_admin.token
+            &member_key.token
         )
         .json(&json!({"name":"Child"}))
         .send()
@@ -557,8 +552,7 @@ async fn deployment_admin_provisions_and_rotates_only_single_workspace_keys() {
         .json()
         .await
         .unwrap();
-    assert_eq!(list["single_key"], true);
-    assert_eq!(list["items"][0]["key_id"], first["key"]["key_id"]);
+    assert_eq!(list["key"]["key_id"], first["key"]["key_id"]);
     assert!(!list.to_string().contains(key));
     let rotate = format!("{destination}/keys/rotate");
     assert_eq!(
@@ -585,8 +579,8 @@ async fn deployment_admin_provisions_and_rotates_only_single_workspace_keys() {
         .unwrap();
     assert_eq!(service.private_session(&after).await.unwrap(), session);
 
-    let legacy = format!("{path}/{}", member.workspace_id);
-    let legacy_keys: Value = call(Method::GET, &format!("{legacy}/keys"), &admin)
+    let other = format!("{path}/{}", member.workspace_id);
+    let other_key: Value = call(Method::GET, &format!("{other}/keys"), &admin)
         .send()
         .await
         .unwrap()
@@ -595,14 +589,11 @@ async fn deployment_admin_provisions_and_rotates_only_single_workspace_keys() {
         .json()
         .await
         .unwrap();
-    assert_eq!(
-        legacy_keys,
-        json!({"single_key":false,"items":[],"next_after":null})
-    );
+    assert_eq!(other_key["key"]["key_id"], json!(member_key.key_id));
     for (method, target, expected) in [
         (
             Method::POST,
-            format!("{legacy}/keys"),
+            format!("{other}/keys"),
             StatusCode::METHOD_NOT_ALLOWED,
         ),
         (
@@ -612,32 +603,27 @@ async fn deployment_admin_provisions_and_rotates_only_single_workspace_keys() {
         ),
         (
             Method::POST,
-            format!("{legacy}/keys/rotate"),
-            StatusCode::NOT_FOUND,
-        ),
-        (
-            Method::POST,
-            format!("{legacy}/keys/{}/rotate", member_admin.key_id),
+            format!("{other}/keys/{}/rotate", member_key.key_id),
             StatusCode::NOT_FOUND,
         ),
         (
             Method::DELETE,
-            format!("{legacy}/keys/{}", member_admin.key_id),
+            format!("{other}/keys/{}", member_key.key_id),
             StatusCode::NOT_FOUND,
         ),
         (
             Method::GET,
-            format!("{legacy}/workspace-key-grants"),
+            format!("{other}/workspace-key-grants"),
             StatusCode::NOT_FOUND,
         ),
         (
             Method::PUT,
-            format!("{legacy}/workspace-key-grants/{}", member_admin.key_id),
+            format!("{other}/workspace-key-grants/{}", member_key.key_id),
             StatusCode::NOT_FOUND,
         ),
         (
             Method::DELETE,
-            format!("{legacy}/workspace-key-grants/{}", member_admin.key_id),
+            format!("{other}/workspace-key-grants/{}", member_key.key_id),
             StatusCode::NOT_FOUND,
         ),
         (
@@ -655,8 +641,8 @@ async fn deployment_admin_provisions_and_rotates_only_single_workspace_keys() {
         assert_eq!(status, expected, "{target}");
     }
     assert_eq!(
-        service.auth(&member_admin.token).await.unwrap().id,
-        member_admin.key_id
+        service.auth(&member_key.token).await.unwrap().id,
+        member_key.key_id
     );
     store.rotate_deployment_admin().await.unwrap();
     assert_eq!(

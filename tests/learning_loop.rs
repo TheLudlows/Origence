@@ -2932,9 +2932,13 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
     feedback(&s, &owner, &turn, Uuid::new_v4()).await;
     let learning = learn(&s, &owner, session).await;
     let writer = s.issue_key(&owner, "writer").await.unwrap();
-    let reviewer = s.issue_key(&owner, "writer").await.unwrap();
+    let administrator = s
+        .engine
+        .relational()
+        .rotate_deployment_admin()
+        .await
+        .unwrap();
     let writer_token = writer["token"].as_str().unwrap();
-    let reviewer_token = reviewer["token"].as_str().unwrap();
     let (base, _api) = serve(origence::api::router(s.clone())).await;
     let http = reqwest::Client::new();
     let asset = id(&learning, "asset_id").to_string();
@@ -2950,8 +2954,8 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
     );
     assert_eq!(source.as_object().unwrap().len(), 4);
     cli(&base, writer_token, &["asset-source", &asset, "2"], false).await;
-    // Even the new candidate owner and the appointed reviewer cannot read old raw support.
-    for token in [writer_token, reviewer_token] {
+    // The candidate owner can use the published Learning without reading raw support.
+    {
         for path in [
             format!("/v1/sessions/{session}/turns/{}", id(&turn, "turn_id")),
             format!(
@@ -2963,7 +2967,7 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
         ] {
             let response = http
                 .get(format!("{base}{path}"))
-                .bearer_auth(token)
+                .bearer_auth(writer_token)
                 .send()
                 .await
                 .unwrap();
@@ -3009,7 +3013,6 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
     .await;
     let tenant = owner.tenant_id.to_string();
     let workspace = owner.workspace_id.to_string();
-    let reviewer_id = reviewer["key_id"].as_str().unwrap();
     let mut approved = Vec::new();
     for _ in 0..2 {
         let review = Uuid::new_v4().to_string();
@@ -3023,8 +3026,6 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
                 &review,
                 "--revision",
                 "1",
-                "--reviewer-id",
-                reviewer_id,
                 "--tenant-id",
                 &tenant,
                 "--workspace-id",
@@ -3046,19 +3047,22 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
         ] {
             assert!(!packet.to_string().contains(&hidden));
         }
-        cli(
-            &base,
-            reviewer_token,
-            &["decide", &review, &digest, "--approve"],
-            true,
-        )
-        .await;
+        http.post(format!(
+            "{base}/admin/deployment/workspaces/{workspace}/skill-reviews/{review}/decision"
+        ))
+        .bearer_auth(&administrator)
+        .json(&json!({"digest":digest,"approve":true}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
         approved.push((review, skill, digest));
     }
     let (published_review, published_skill, published_digest) = &approved[0];
     cli(
         &base,
-        reviewer_token,
+        writer_token,
         &["publish", published_review, published_digest],
         true,
     )
@@ -3084,7 +3088,7 @@ async fn learning_skill_cli_exact_source_private_support_and_withdrawal() {
     let (pending_review, _, pending_digest) = &approved[1];
     cli(
         &base,
-        reviewer_token,
+        writer_token,
         &["publish", pending_review, pending_digest],
         false,
     )

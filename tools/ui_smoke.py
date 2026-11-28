@@ -23,8 +23,10 @@ def main():
     binary, entry = str(Path(args.binary).resolve()), str(Path(args.ui_entry).resolve())
     with tempfile.TemporaryDirectory(prefix="origence-ui-smoke-") as directory:
         env = isolated_env(directory)
-        token = seed_workspace(env, "UI smoke")["token"]
-        with Host(binary, env, token, [token]) as host, tempfile.TemporaryFile() as log:
+        workspace = seed_workspace(env, "UI smoke", single_key=True)
+        token = workspace["token"]
+        other = seed_workspace(env, "UI smoke isolated workspace", workspace["workspace_id"], single_key=True)
+        with Host(binary, env, token, [token, other["token"]]) as host, tempfile.TemporaryFile() as log:
             with socket.socket() as sock:
                 sock.bind(("127.0.0.1", 0))
                 port = sock.getsockname()[1]
@@ -86,7 +88,6 @@ def main():
                 require(request("/v1/runs")["items"][0]["run_id"] == run, "run catalog missing owner record")
                 trace = request(f"/v1/runs/{run}")
                 require(trace["events"][0]["evidence_origin"] == "server_prepared", "preparation origin lost")
-                other = host.request("/admin/keys", {"workspace_id": workspace["workspace_id"], "role": "reader"})
                 require(request("/v1/runs", key=other["token"])["items"] == [], "private Run leaked to another key")
                 try:
                     request(f"/v1/runs/{run}", key=other["token"])

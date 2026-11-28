@@ -106,12 +106,6 @@ struct WorkspaceInput {
     name: String,
 }
 
-#[derive(Deserialize)]
-struct KeyPage {
-    after: Option<Uuid>,
-    limit: Option<u32>,
-}
-
 async fn provision(
     State(service): State<Service>,
     headers: HeaderMap,
@@ -129,16 +123,10 @@ async fn keys(
     State(service): State<Service>,
     headers: HeaderMap,
     Path(workspace): Path<Uuid>,
-    Query(page): Query<KeyPage>,
 ) -> Result<impl IntoResponse> {
     Ok(uncached_json(
         service
-            .deployment_workspace_keys(
-                token(&headers)?,
-                workspace,
-                page.after.unwrap_or_default(),
-                page.limit.unwrap_or(50),
-            )
+            .deployment_workspace_key(token(&headers)?, workspace)
             .await?,
     ))
 }

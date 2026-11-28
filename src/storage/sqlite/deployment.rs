@@ -1,7 +1,6 @@
 //! Explicit deployment-wide inspection and moderation authority.
 use super::*;
 
-#[cfg(feature = "host")]
 fn admin_actor_id(token_hash: &str) -> Uuid {
     // Administrator receipts use a distinct UUID version from workspace keys.
     // Derive the actor from the verified fingerprint without storing the token.
@@ -14,7 +13,6 @@ fn admin_actor_id(token_hash: &str) -> Uuid {
     uuid::Builder::from_custom_bytes(bytes).into_uuid()
 }
 
-#[cfg(feature = "host")]
 pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> StorageResult<Uuid> {
     if token.len() != 73 || !token.starts_with("oc_admin_") {
         return Err(StorageError::Unauthorized);
@@ -33,7 +31,6 @@ pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> Storage
     Ok(admin_actor_id(&fingerprint))
 }
 
-#[cfg(feature = "host")]
 pub(super) async fn live_admin_in_scope(
     conn: &mut Connection,
     actor: Uuid,
@@ -137,7 +134,6 @@ impl SqliteStore {
     }
 
     /// Begin a read transaction for the selected workspace.
-    #[cfg(feature = "host")]
     pub(crate) async fn begin_deployment_inspection(
         &self,
         token: &str,
@@ -146,8 +142,8 @@ impl SqliteStore {
         self.deployment_workspace_tx(token, workspace, false).await
     }
 
-    #[cfg(feature = "host")]
-    pub(crate) async fn authorize_deployment_workspace(
+    /// Authenticate the instance administrator for the selected workspace.
+    pub async fn authorize_deployment_workspace(
         &self,
         token: &str,
         workspace: Uuid,
@@ -162,7 +158,6 @@ impl SqliteStore {
         Ok(auth)
     }
 
-    #[cfg(feature = "host")]
     async fn deployment_workspace_tx(
         &self,
         token: &str,
@@ -243,23 +238,25 @@ impl SqliteStore {
     }
 
     #[cfg(feature = "host")]
-    pub(crate) async fn deployment_workspace_keys(
+    pub(crate) async fn deployment_workspace_key(
         &self,
         token: &str,
         workspace: Uuid,
-        after: Uuid,
-        limit: u32,
     ) -> StorageResult<Value> {
         let mut tx = self.begin_deployment_inspection(token, workspace).await?;
-        let single_key = super::workspace_key::has_workspace_key(&mut tx.tx, tx.scope).await?;
-        let mut page = if single_key {
-            tx.list_issued_keys_inner(after, limit).await?
-        } else {
-            json!({"items":[],"next_after":null})
-        };
-        page["single_key"] = json!(single_key);
+        let row: Option<(Uuid, i64)> = sqlite_db::query_as(
+            "SELECT id,created_at FROM oc_api_keys
+             WHERE tenant_id=? AND workspace_id=? AND role='workspace' AND NOT revoked",
+        )
+        .bind(tx.scope.tenant_id)
+        .bind(tx.scope.workspace_id)
+        .fetch_optional(&mut *tx.tx)
+        .await
+        .map_err(sqlite_err)?;
         tx.commit().await?;
-        Ok(page)
+        let key = row
+            .map(|(key_id, created_at_ms)| json!({"key_id":key_id,"created_at_ms":created_at_ms}));
+        Ok(json!({"key":key}))
     }
 
     #[cfg(feature = "host")]

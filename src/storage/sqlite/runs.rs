@@ -366,13 +366,10 @@ impl SqliteTx {
         }
         // The administrator verifies a selected packet against the Run's own
         // session proofs. Workspace credentials retain the ordinary source guard.
-        #[cfg(feature = "host")]
         let bound_session =
             super::deployment::live_admin_in_scope(&mut self.tx, self.principal_id, self.scope)
                 .await?
                 .then_some(session);
-        #[cfg(not(feature = "host"))]
-        let bound_session = None;
         if !(0..=10000).contains(&through_sequence) {
             return Err(StorageError::InvalidArgument("invalid run prefix"));
         }

@@ -3,7 +3,7 @@ mod support;
 use origence::{
     client::HostClient,
     models::Models,
-    storage::{RelationalStore, Scope, sqlite_db},
+    storage::{Scope, sqlite_db},
 };
 use reqwest::{Method, StatusCode};
 use serde_json::{Value, json};
@@ -42,18 +42,25 @@ async fn cli_selected_run_edit_review_publish_and_withdraw() {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
     };
-    store
-        .create_workspace(scope.tenant_id, scope.workspace_id, "synthetic skill CLI")
+    let writer = store
+        .create_key_workspace(scope, "synthetic skill CLI")
         .await
         .unwrap();
-    let writer = store.issue_key(scope, "writer").await.unwrap();
-    let reviewer = store.issue_key(scope, "writer").await.unwrap();
-    let other = store.issue_key(scope, "admin").await.unwrap();
+    let foreign_scope = Scope {
+        workspace_id: Uuid::new_v4(),
+        ..scope
+    };
+    let other = store
+        .create_key_workspace(foreign_scope, "foreign workspace")
+        .await
+        .unwrap();
+    let administrator = store.rotate_deployment_admin().await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let app = origence::api::router(service.clone());
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let writer_client = HostClient::new(&base, writer.token.clone()).unwrap();
+    let admin_client = HostClient::new(&base, administrator).unwrap();
     let run = Uuid::new_v4().to_string();
     writer_client
         .call(
@@ -120,10 +127,9 @@ async fn cli_selected_run_edit_review_publish_and_withdraw() {
         );
     }
     cli(&base, &other.token, &["candidate", &candidate], false).await;
-    cli(&base, &reviewer.token, &["package", &skill, "1"], false).await;
+    cli(&base, &writer.token, &["package", &skill, "1"], false).await;
     let tenant = scope.tenant_id.to_string();
     let workspace = scope.workspace_id.to_string();
-    let reviewer_id = reviewer.key_id.to_string();
     let review = Uuid::new_v4().to_string();
     let submit = |review: &str, revision: &str| {
         vec![
@@ -132,8 +138,6 @@ async fn cli_selected_run_edit_review_publish_and_withdraw() {
             review.into(),
             "--revision".into(),
             revision.into(),
-            "--reviewer-id".into(),
-            reviewer_id.clone(),
             "--tenant-id".into(),
             tenant.clone(),
             "--workspace-id".into(),
@@ -155,22 +159,23 @@ async fn cli_selected_run_edit_review_publish_and_withdraw() {
     assert!(!packet.to_string().contains("PRIVATE"));
     assert!(!packet.to_string().contains(&run));
     let digest = packet["digest"].as_str().unwrap();
-    cli(&base, &reviewer.token, &["publish", &review, digest], false).await;
-    cli(
-        &base,
-        &other.token,
-        &["decide", &review, digest, "--approve"],
-        false,
-    )
-    .await;
-    cli(&base, &reviewer.token, &["review", &review], true).await;
-    cli(
-        &base,
-        &reviewer.token,
-        &["decide", &review, digest, "--approve"],
-        true,
-    )
-    .await;
+    cli(&base, &writer.token, &["publish", &review, digest], false).await;
+    let review_path =
+        |id: &str| format!("/admin/deployment/workspaces/{workspace}/skill-reviews/{id}");
+    let displayed = admin_client
+        .call(Method::GET, &review_path(&review), None, None)
+        .await
+        .unwrap();
+    assert_eq!(displayed["packet"], packet);
+    admin_client
+        .call(
+            Method::POST,
+            &format!("{}/decision", review_path(&review)),
+            Some(&json!({"digest":digest,"approve":true})),
+            None,
+        )
+        .await
+        .unwrap();
     selection["selected_basis"] = json!("Changed redacted observation");
     tokio::fs::write(&selection_path, selection.to_string())
         .await
@@ -192,7 +197,7 @@ async fn cli_selected_run_edit_review_publish_and_withdraw() {
         .await["revision"],
         2
     );
-    cli(&base, &reviewer.token, &["publish", &review, digest], false).await;
+    cli(&base, &writer.token, &["publish", &review, digest], false).await;
     let review2 = Uuid::new_v4().to_string();
     let args = submit(&review2, "2");
     let packet = cli(
@@ -203,17 +208,19 @@ async fn cli_selected_run_edit_review_publish_and_withdraw() {
     )
     .await;
     let digest = packet["digest"].as_str().unwrap();
-    cli(
-        &base,
-        &reviewer.token,
-        &["decide", &review2, digest, "--approve"],
-        true,
-    )
-    .await;
-    let package = cli(&base, &reviewer.token, &["publish", &review2, digest], true).await;
+    admin_client
+        .call(
+            Method::POST,
+            &format!("{}/decision", review_path(&review2)),
+            Some(&json!({"digest":digest,"approve":true})),
+            None,
+        )
+        .await
+        .unwrap();
+    let package = cli(&base, &writer.token, &["publish", &review2, digest], true).await;
     assert!(!package.to_string().contains("observation"));
     cli(&base, &writer.token, &["package", &skill, "1"], true).await;
-    cli(&base, &reviewer.token, &["withdraw", &skill, "1"], true).await;
+    cli(&base, &writer.token, &["withdraw", &skill, "1"], true).await;
     cli(&base, &writer.token, &["package", &skill, "1"], false).await;
     host.abort();
     service.engine.shutdown().await.unwrap();
@@ -360,7 +367,7 @@ async fn single_workspace_key_submits_and_only_administrator_decides() {
             owner_decision.as_str(),
             key.token.as_str(),
             Some(&approved),
-            StatusCode::FORBIDDEN,
+            StatusCode::NOT_FOUND,
         ),
         (
             Method::POST,

@@ -142,25 +142,13 @@ impl SqliteTx {
         if review.is_nil() {
             return Err(StorageError::Forbidden);
         }
-        if input.reviewer_id.is_nil() {
-            #[cfg(feature = "host")]
-            {
-                let configured: bool = sqlite_db::query_scalar(
-                    "SELECT EXISTS(SELECT 1 FROM oc_deployment_admin WHERE singleton=1)",
-                )
-                .fetch_one(&mut *self.tx)
-                .await
-                .map_err(sqlite_err)?;
-                if !configured {
-                    return Err(StorageError::Forbidden);
-                }
-            }
-            #[cfg(not(feature = "host"))]
-            return Err(StorageError::Forbidden);
-        } else if super::workspace_key::has_workspace_key(&mut self.tx, self.scope).await?
-            || !Permission::Write
-                .granted_by(&self.live_role_for_principal(input.reviewer_id).await?)
-        {
+        let configured: bool = sqlite_db::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM oc_deployment_admin WHERE singleton=1)",
+        )
+        .fetch_one(&mut *self.tx)
+        .await
+        .map_err(sqlite_err)?;
+        if !configured {
             return Err(StorageError::Forbidden);
         }
         let content = self.skill_revision(candidate, current).await?;
@@ -174,41 +162,33 @@ impl SqliteTx {
         }
         let package = content.draft.package(&input.target, self.scope)?;
         let packet = SkillReviewPacket::build(review, input, package)?;
-        let old:Option<(Uuid,u32,Uuid,String)>=sqlite_db::query_as("SELECT candidate_id,revision,reviewer_id,packet FROM oc_skill_reviews WHERE tenant_id=? AND workspace_id=? AND id=?")
+        let old:Option<(Uuid,u32,String)>=sqlite_db::query_as("SELECT candidate_id,revision,packet FROM oc_skill_reviews WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
-        if let Some((id, revision, reviewer, stored)) = old {
+        if let Some((id, revision, stored)) = old {
             if id != candidate
                 || revision != current
-                || reviewer != input.reviewer_id
                 || decode::<SkillReviewPacket>(&stored)? != packet
             {
                 return Err(StorageError::Conflict("Skill review ID reused".into()));
             }
             return Ok(packet);
         }
-        sqlite_db::query("INSERT INTO oc_skill_reviews(tenant_id,workspace_id,id,candidate_id,revision,reviewer_id,packet,digest,created_at) VALUES(?,?,?,?,?,?,?,?,?)")
-            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review).bind(candidate).bind(i64::from(current)).bind(input.reviewer_id)
+        sqlite_db::query("INSERT INTO oc_skill_reviews(tenant_id,workspace_id,id,candidate_id,revision,packet,digest,created_at) VALUES(?,?,?,?,?,?,?,?)")
+            .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review).bind(candidate).bind(i64::from(current))
             .bind(encode(&packet)?).bind(&packet.digest).bind(now_ms()).execute(&mut *self.tx).await.map_err(sqlite_err)?;
         Ok(packet)
     }
     async fn skill_review_row(
         &mut self,
         review: Uuid,
-    ) -> StorageResult<(Uuid, u32, Uuid, String, String, String)> {
-        sqlite_db::query_as("SELECT candidate_id,revision,reviewer_id,packet,digest,decision FROM oc_skill_reviews WHERE tenant_id=? AND workspace_id=? AND id=?")
+    ) -> StorageResult<(Uuid, u32, String, String, String)> {
+        sqlite_db::query_as("SELECT candidate_id,revision,packet,digest,decision FROM oc_skill_reviews WHERE tenant_id=? AND workspace_id=? AND id=?")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(review)
             .fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?.ok_or(StorageError::NotFound)
     }
-    async fn matches_skill_reviewer(&mut self, reviewer: Uuid) -> StorageResult<bool> {
-        if !reviewer.is_nil() {
-            return Ok(self.principal_id == reviewer);
-        }
-        #[cfg(feature = "host")]
-        return super::deployment::live_admin_in_scope(&mut self.tx, self.principal_id, self.scope)
-            .await;
-        #[cfg(not(feature = "host"))]
-        Ok(false)
+    async fn is_skill_administrator(&mut self) -> StorageResult<bool> {
+        super::deployment::live_admin_in_scope(&mut self.tx, self.principal_id, self.scope).await
     }
 
     #[cfg(feature = "host")]
@@ -217,7 +197,7 @@ impl SqliteTx {
         after: Uuid,
         limit: usize,
     ) -> StorageResult<Value> {
-        if !self.matches_skill_reviewer(Uuid::nil()).await? {
+        if !self.is_skill_administrator().await? {
             return Err(StorageError::Forbidden);
         }
         if !(1..=100).contains(&limit) {
@@ -225,11 +205,10 @@ impl SqliteTx {
         }
         let mut rows: Vec<(Uuid, u32, String)> = sqlite_db::query_as(
             "SELECT id,revision,decision FROM oc_skill_reviews
-             WHERE tenant_id=? AND workspace_id=? AND reviewer_id=? AND id>? ORDER BY id LIMIT ?",
+             WHERE tenant_id=? AND workspace_id=? AND id>? ORDER BY id LIMIT ?",
         )
         .bind(self.scope.tenant_id)
         .bind(self.scope.workspace_id)
-        .bind(Uuid::nil())
         .bind(after)
         .bind((limit + 1) as i64)
         .fetch_all(&mut *self.tx)
@@ -247,10 +226,9 @@ impl SqliteTx {
     /// Selected packet only; publication roles do not grant access to the archive.
     pub async fn skill_review(&mut self, review: Uuid) -> StorageResult<Value> {
         self.check_permission(Permission::Read).await?;
-        let (candidate, revision, reviewer, packet, _, decision) =
-            self.skill_review_row(review).await?;
+        let (candidate, revision, packet, _, decision) = self.skill_review_row(review).await?;
         let (owner, current) = self.skill_head(candidate).await?;
-        if !self.matches_skill_reviewer(reviewer).await? && self.private_key_id().await? != owner {
+        if !self.is_skill_administrator().await? && self.private_key_id().await? != owner {
             return Err(StorageError::NotFound);
         }
         if current != revision {
@@ -275,9 +253,8 @@ impl SqliteTx {
         approve: bool,
     ) -> StorageResult<()> {
         self.check_permission(Permission::Write).await?;
-        let (candidate, revision, reviewer, _, stored, decision) =
-            self.skill_review_row(review).await?;
-        if !self.matches_skill_reviewer(reviewer).await? {
+        let (candidate, revision, _, stored, decision) = self.skill_review_row(review).await?;
+        if !self.is_skill_administrator().await? {
             return Err(StorageError::Forbidden);
         }
         if stored != digest {
@@ -317,17 +294,10 @@ impl SqliteTx {
         digest: &str,
     ) -> StorageResult<SkillPackage> {
         self.check_permission(Permission::Write).await?;
-        let (candidate, revision, reviewer, packet, stored, decision) =
-            self.skill_review_row(review).await?;
+        let (candidate, revision, packet, stored, decision) = self.skill_review_row(review).await?;
         let (owner, current) = self.skill_head(candidate).await?;
-        if reviewer.is_nil() {
-            if !self.matches_skill_reviewer(reviewer).await?
-                && self.private_key_id().await? != owner
-            {
-                return Err(StorageError::NotFound);
-            }
-        } else if !Permission::Write.granted_by(&self.live_role_for_principal(reviewer).await?) {
-            return Err(StorageError::Forbidden);
+        if !self.is_skill_administrator().await? && self.private_key_id().await? != owner {
+            return Err(StorageError::NotFound);
         }
         if decision != "approved" || stored != digest {
             return Err(StorageError::Conflict(
@@ -382,7 +352,7 @@ impl SqliteTx {
             .await?;
         // The accepted review packet owns the frozen bytes. Open it only
         // through this published pointer and return only the distributable part.
-        let (_, _, _, packet, review_digest, decision) = self.skill_review_row(review).await?;
+        let (_, _, packet, review_digest, decision) = self.skill_review_row(review).await?;
         let packet: SkillReviewPacket = decode(&packet)?;
         let package = packet.package;
         package.validate()?;

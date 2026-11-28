@@ -61,7 +61,6 @@ impl SqliteTx {
         if let Some(role) = role {
             return Ok(role);
         }
-        #[cfg(feature = "host")]
         if super::deployment::live_admin_in_scope(&mut self.tx, principal_id, scope).await? {
             return Ok("admin".into());
         }

@@ -40,10 +40,9 @@ Run 所有者可针对精确前缀通过 HTTP 登记外部记录号，或转录�
 | --- | --- |
 | `PUT /v1/skill-candidates/{id}` | `{expected_revision,candidate}`；0 创建，修改产生新修订。`candidate` 接受 `SkillCandidateInput` 或[选定经历输入](SKILL-CANDIDATE-CLI.zh-CN.md#使用-cli-选择依据并编辑)，后者须明确确认披露。 |
 | `GET /v1/skill-candidates/{id}` | 仅创建者读取候选、私有备注和精确依据 |
-| `POST /v1/skill-candidates/{id}/reviews/{review}` | 提交修订、目标和脱敏依据。单 Key 工作区省略 `reviewer_id`，提交给管理员。旧工作区可指定审阅者凭据。 |
+| `POST /v1/skill-candidates/{id}/reviews/{review}` | 向管理员提交修订、目标和脱敏依据。 |
 | `GET /v1/skill-reviews/{review}` | 选定审阅包、决定和 `published` 状态 |
-| `POST /v1/skill-reviews/{review}/decision` | 旧工作区的指定审阅者使用 `{digest,approve}` 记录决定。管理员审核使用工作区管理接口。 |
-| `POST /v1/skill-reviews/{review}/publish` | 候选所有者用 `{digest}` 发布获管理员批准的包。旧工作区凭据审核沿用原发布权限。 |
+| `POST /v1/skill-reviews/{review}/publish` | 候选所有者用 `{digest}` 发布获管理员批准的包。 |
 | `GET /v1/skills/{id}/versions/{version}/package` | 核对作用域、版本和来源后返回仅包含获准工件的包 |
 | `DELETE /v1/skills/{id}/versions/{version}` | writer 或 admin 撤回已发布 Skill 版本，阻断后续包下载 |
 
@@ -155,7 +154,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | `/admin/deployment/workspaces/{id}/skill-reviews` | 提交给管理员的 Skill 审核列表，按 ID 分页 |
 | `/admin/deployment/workspaces/{id}/skill-reviews/{review}` | 选定审阅包、决定和发布状态 |
 | `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` 和 `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | 已发布内容目录与指定版本正文 |
-| `/admin/deployment/workspaces/{id}/keys` | 当前有效的单 Key 元数据，包含 `single_key`。旧凭据工作区返回 `single_key:false` 和空列表 |
+| `/admin/deployment/workspaces/{id}/keys` | 当前工作区 Key 的 `key_id` 与 `created_at_ms`，放在 `key` 字段 |
 
 部署管理员用 `PUT /admin/deployment/workspaces/{id}` 提交 `{name}` 创建平级单 Key 工作空间，同一事务签发首把 Key。回执只在首次成功时返回 `key:{key_id,token}`，同 ID 同名重试返回 `created:false`。响应禁止缓存，未收到首次 Key 时可用 `POST /admin/deployment/workspaces/{id}/keys/rotate` 补发并撤销旧 Key，保留逻辑身份与会话。
 

@@ -146,13 +146,9 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     const keys = () => show("API Key", (target, viewSignal) => {
       const result = el("div");
       target.append(result);
-      void api.get<{ single_key: boolean; items: { key_id: string }[] }>(`${base}/keys?limit=1`, viewSignal).then((page) => {
+      void api.get<{ key: { key_id: string } | null }>(`${base}/keys`, viewSignal).then((page) => {
         if (viewSignal.aborted) return;
-        if (!page.single_key) {
-          result.append(el("p", "muted", "此工作区尚未使用单 Key。"));
-          return;
-        }
-        const state = el("p", "muted", page.items[0]?.key_id ?? "暂无有效 Key");
+        const state = el("p", "muted", page.key?.key_id ?? "暂无有效 Key");
         const rotate = button("轮换工作区 Key", async () => {
           if (rotate.disabled || !window.confirm("轮换后，旧 Key 将立即失效。继续？")) return;
           rotate.disabled = true;

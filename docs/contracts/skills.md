@@ -13,15 +13,13 @@ prefixes. No operation auto-publishes.
   revisions under the caller's stable logical key. Private notes and source
   references remain owner-only through the candidate interface.
 - The owner submits an explicit review ID, exact revision, workspace/Skill/version
-  target, and selected redacted basis. In a single-key workspace, omit `reviewer_id`.
+  target, and selected redacted basis.
   The account administrator opens selected review packets in that workspace. The
-  workspace key can submit and read its packet. Legacy workspaces retain explicit
-  credential appointments. The packet contains only the selected disclosure.
+  workspace key can submit and read its packet. The packet contains only the selected disclosure.
 - `decide_skill_review(review, packet_digest, approve)` requires the current
   administrator for these submissions. The decision is immutable and records the
   deciding actor in the same transaction. Changing the decision requires a new
-  review ID. An administrator decision survives key rotation. An explicit legacy
-  appointment continues to require the live appointed credential.
+  review ID. An administrator decision survives key rotation.
 - `publish_skill(review, packet_digest)` is a distinct explicit operation. For an
   administrator review, the current administrator or candidate owner can publish.
   Publication rechecks current write access, the approved packet, current candidate

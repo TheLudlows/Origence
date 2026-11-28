@@ -22,18 +22,22 @@ impl Fixture {
             tenant_id: Uuid::new_v4(),
             workspace_id: Uuid::new_v4(),
         };
-        store
-            .create_workspace(scope.tenant_id, scope.workspace_id, "skills")
+        let key = store.create_key_workspace(scope, "skills").await.unwrap();
+        let owner = store.authenticate(&key.token).await.unwrap();
+        let administrator = store.rotate_deployment_admin().await.unwrap();
+        let reviewer = store
+            .authorize_deployment_workspace(&administrator, scope.workspace_id)
             .await
             .unwrap();
-        let mut keys = Vec::new();
-        for role in ["writer", "writer", "admin"] {
-            let key = store.issue_key(scope, role).await.unwrap();
-            keys.push(store.authenticate(&key.token).await.unwrap());
-        }
-        let owner = keys.remove(0);
-        let reviewer = keys.remove(0);
-        let other = keys.remove(0);
+        let foreign = Scope {
+            workspace_id: Uuid::new_v4(),
+            ..scope
+        };
+        let key = store
+            .create_key_workspace(foreign, "foreign")
+            .await
+            .unwrap();
+        let other = store.authenticate(&key.token).await.unwrap();
         let source = Uuid::new_v4();
         let asset = Uuid::new_v4();
         let mut tx = store.begin(owner.clone()).await.unwrap();
@@ -72,7 +76,6 @@ impl Fixture {
     fn review(&self, revision: u32, skill: Uuid) -> SkillReviewInput {
         SkillReviewInput {
             revision,
-            reviewer_id: self.reviewer.principal_id,
             target: SkillTarget {
                 tenant_id: self.owner.scope.tenant_id,
                 workspace_id: self.owner.scope.workspace_id,
@@ -148,7 +151,7 @@ async fn skill_exact_approval_private_review_restart_and_withdrawal() {
     f.store = SqliteStore::open(f.dir.path().join("skills.db"))
         .await
         .unwrap();
-    let mut tx = f.store.begin(f.other.clone()).await.unwrap();
+    let mut tx = f.store.begin(f.owner.clone()).await.unwrap();
     assert_eq!(package, tx.skill_package(skill, 1).await.unwrap());
     tx.withdraw_skill(skill, 1).await.unwrap();
     assert!(matches!(
@@ -161,7 +164,7 @@ async fn skill_exact_approval_private_review_restart_and_withdrawal() {
 }
 
 #[tokio::test]
-async fn skill_edits_targets_sources_and_reviewer_revocation_invalidate_publication() {
+async fn skill_edits_targets_and_sources_invalidate_publication() {
     let f = Fixture::new().await;
     let candidate = Uuid::new_v4();
     let review = Uuid::new_v4();
@@ -210,7 +213,7 @@ async fn skill_edits_targets_sources_and_reviewer_revocation_invalidate_publicat
         .unwrap();
     tx.publish_skill(next, &packet.digest).await.unwrap();
     tx.commit().await.unwrap();
-    let mut tx = f.store.begin(f.other.clone()).await.unwrap();
+    let mut tx = f.store.begin(f.owner.clone()).await.unwrap();
     sqlite_db::query(
         "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
     )
@@ -230,7 +233,7 @@ async fn skill_edits_targets_sources_and_reviewer_revocation_invalidate_publicat
 }
 
 #[tokio::test]
-async fn skill_private_run_basis_and_revoked_approver_fail_closed() {
+async fn skill_private_run_basis_survives_administrator_rotation() {
     let f = Fixture::new().await;
     let run = Uuid::new_v4();
     let candidate = Uuid::new_v4();
@@ -275,24 +278,15 @@ async fn skill_private_run_basis_and_revoked_approver_fail_closed() {
         .await
         .unwrap();
     tx.commit().await.unwrap();
-    f.store.revoke_key(f.reviewer.principal_id).await.unwrap();
-    let mut tx = f.store.begin(f.other.clone()).await.unwrap();
+    f.store.rotate_deployment_admin().await.unwrap();
     assert!(matches!(
-        tx.publish_skill(review, &packet.digest).await,
+        f.store.begin(f.reviewer.clone()).await,
         Err(StorageError::Forbidden)
     ));
-    tx.rollback().await.unwrap();
-    let foreign = Scope {
-        workspace_id: Uuid::new_v4(),
-        ..f.owner.scope
-    };
-    f.store
-        .create_workspace(foreign.tenant_id, foreign.workspace_id, "foreign")
-        .await
-        .unwrap();
-    let key = f.store.issue_key(foreign, "admin").await.unwrap();
-    let auth = f.store.authenticate(&key.token).await.unwrap();
-    let mut tx = f.store.begin(auth).await.unwrap();
+    let mut tx = f.store.begin(f.owner.clone()).await.unwrap();
+    tx.publish_skill(review, &packet.digest).await.unwrap();
+    tx.commit().await.unwrap();
+    let mut tx = f.store.begin(f.other.clone()).await.unwrap();
     assert!(matches!(
         tx.skill_candidate(candidate).await,
         Err(StorageError::NotFound)
@@ -376,7 +370,7 @@ async fn selected_experience_basis_is_revision_bound_and_sources_stay_live() {
             .contains("observation")
     );
     tx.commit().await.unwrap();
-    let mut tx = f.store.begin(f.other.clone()).await.unwrap();
+    let mut tx = f.store.begin(f.owner.clone()).await.unwrap();
     sqlite_db::query(
         "UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=?",
     )

@@ -30,10 +30,9 @@ async function run(binary) {
   try {
     const a = seedWorkspace(directory, "研发", undefined, true);
     const b = seedWorkspace(directory, "运营", a.workspace_id, true);
-    const legacy = seedWorkspace(directory, "旧凭据工作区");
     const deploymentKey = "oc_admin_" + randomBytes(32).toString("hex");
     env.OC_DEPLOYMENT_ADMIN_KEY = deploymentKey;
-    secrets.push(a.token, b.token, legacy.token, deploymentKey);
+    secrets.push(a.token, b.token, deploymentKey);
     host = spawn(binary, ["serve", "--local", "--bind", "127.0.0.1:0"], { cwd: directory, env });
     host.stderr.setEncoding("utf8").on("data", (chunk) => { stderr = (stderr + chunk).slice(-65536); });
     const lines = createInterface({ input: host.stdout });
@@ -121,10 +120,6 @@ async function run(binary) {
     await page.getByText("已发布", { exact: true }).waitFor();
     assert.equal((await call(packagePath, a.token)).status, 200);
     assert.equal((await call(packagePath, b.token)).status, 404);
-    await page.getByRole("button", { name: "旧凭据工作区", exact: true }).click();
-    await page.getByRole("button", { name: "API Key", exact: true }).click();
-    await page.getByText("此工作区尚未使用单 Key。", { exact: true }).waitFor();
-    assert.equal(await page.getByRole("button", { name: "轮换工作区 Key", exact: true }).count(), 0);
     await page.getByRole("button", { name: "新建工作区", exact: true }).click();
     await page.getByLabel("工作区名称", { exact: true }).fill("独立试点");
     await page.getByRole("button", { name: "创建工作区", exact: true }).click();
@@ -145,7 +140,6 @@ async function run(binary) {
     assert.equal((await whoami(firstKey)).status, 401);
     assert.equal((await whoami(a.token)).status, 200);
     assert.equal((await whoami(b.token)).status, 200);
-    assert.equal((await whoami(legacy.token)).status, 200);
     await page.getByRole("button", { name: "知识", exact: true }).click();
     await workspaceSecret.waitFor({ state: "detached" });
     const browserData = await page.evaluate(() => JSON.stringify({ session: { ...sessionStorage }, local: { ...localStorage }, cookie: document.cookie }));
