@@ -2288,3 +2288,12 @@ SQLite and permission checks still recognize the old roles. Windows, vendor clie
 Before opening the PR, rebased onto main `4f69478b0cb68211adef40920f7926641a565777`, yielding implementation
 commit `98b9c6cde3068d64e887f539231e84e40b71de6e`. `git range-diff` confirmed an identical implementation patch.
 Main removed two old Python suites. All 3 remaining Python tests passed after the rebase.
+
+## 2026-11-28 — Accepted jobs across administrator credential rotation
+
+Main base `4f69478b0cb68211adef40920f7926641a565777`, implementation commit
+`9895f4e8636c18c28e6063610dc2dcbf75c2d196`. Linux with Rust 1.98.0, a fresh database, and synthetic content.
+The HTTP regression verified automatic completion of pending jobs and retry of a previously cancelled job
+with the replacement credential. Requests using the replaced credential were rejected. Job submitters
+were preserved and output was visible only in its original workspace. Formatting, strict all-targets
+all-features Clippy, and the full Rust suite passed (468 passed, 11 ignored). Windows was not run locally.
