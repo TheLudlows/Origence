@@ -26,6 +26,14 @@ with 11 ignored. Both Skill CLI tests also passed with only `host`. Chromium and
 passed again against the rebuilt default binary.
 Formatting and strict all-target Clippy passed with all features, `host` only, and `sqlite` only.
 
+After integrating #187, Linux verification at `09493a735a526ed6e2f51affaced8c2f5d657c68` on main base
+`d8fd22da59b9f79fe11e779386f248ecd1d3c9fc` passed 469 Rust tests with 11 configured skips.
+Strict Clippy with all features and with only `sqlite`, formatting, 33 UI tests, 15 Agent protocol fixture
+tests, and the HTTP MCP smoke passed. Chromium verified workspace isolation, Skill review and publication,
+history restoration, dated source citations, and source withdrawal. An isolated installer check covered administrator bootstrap,
+workspace provisioning, administrator reuse during reinstall, a scoped synthetic Run, and uninstall.
+Native product clients were not run.
+
 ## 2026-11-28 · Workspace credential isolation and administrator accounts
 
 Verified `4cbdc4960b07f5ce674afa599a31a424b1a3f381` on main base

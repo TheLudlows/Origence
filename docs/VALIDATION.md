@@ -25,6 +25,12 @@ Chromium 156.0.8078.79 通过 `check-key-management-browser.cjs`。浏览器用�
 仅启用 `host` 时两项 Skill CLI 回归也通过。Chromium 和 HTTP MCP 冒烟在重新构建的默认二进制上复测通过。
 全特性、仅 `host`、仅 `sqlite` 的全目标严格 Clippy 及格式检查通过。
 
+同步 #187 后，在 `09493a735a526ed6e2f51affaced8c2f5d657c68` 复测，main 基线为
+`d8fd22da59b9f79fe11e779386f248ecd1d3c9fc`。Linux 上 469 项 Rust 测试通过，按配置忽略 11 项。
+全特性与仅 `sqlite` 的全目标严格 Clippy、格式、33 项 UI 测试、15 项 Agent 协议夹具及 HTTP MCP
+冒烟通过。Chromium 验证工作区隔离、Skill 审核和发布、内容历史恢复、按日期引用原文及撤回。隔离安装器验证启动时
+登记管理员、创建工作区、重装时复用管理员以及在指定工作区写读合成 Run，最后卸载。未运行真实客户端。
+
 ## 2026-11-28 · 工作区凭据隔离与管理员账号
 
 验证提交 `4cbdc4960b07f5ce674afa599a31a424b1a3f381`，main 基线

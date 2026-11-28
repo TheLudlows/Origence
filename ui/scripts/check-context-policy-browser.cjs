@@ -129,7 +129,7 @@ async function preview(page, origin, role, date) {
 
     assert.ok((await api(`/v1/events/${futureId}`, null, "withdraw-future", "DELETE")).ok);
     await openOriginal.click();
-    await future.getByRole("status").filter({ hasText: "原始来源读取失败" }).waitFor();
+    await future.getByRole("status").filter({ hasText: "来源已删除或不可访问。" }).waitFor();
     assert.equal(await future.locator("mark").count(), 0);
     await verifyExcerpt.click();
     await readerCitation.getByRole("status").filter({ hasText: "无法核验引文" }).waitFor();
