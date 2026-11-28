@@ -915,12 +915,6 @@ pub async fn seed_workspace(
         .unwrap()
 }
 
-pub async fn seed_key_workspace(dir: &Path, name: &str) -> serde_json::Value {
-    fixture_workspace::seed_workspace(dir, name, None)
-        .await
-        .unwrap()
-}
-
 /// Provision an independent workspace in the same tenant for isolation tests.
 pub async fn seed_isolated_key(
     service: &Service,

@@ -1774,49 +1774,46 @@ async fn session_http_contract_validates_fields_permissions_and_idempotency() {
             .await
             .unwrap()
             .status(),
+        404
+    );
+    assert_eq!(
+        http.delete(&raw_url)
+            .bearer_auth(&token)
+            .header("Idempotency-Key", "http-withdraw")
+            .send()
+            .await
+            .unwrap()
+            .status(),
         403
     );
-    let deleted = s
-        .delete(
-            &a,
-            "http-withdraw",
-            id(&receipt, "source_event_id"),
-            "event",
-        )
+    let scope = Scope {
+        tenant_id: a.tenant_id,
+        workspace_id: a.workspace_id,
+    };
+    let replacement = s
+        .engine
+        .relational()
+        .rotate_workspace_key(scope)
         .await
         .unwrap();
-    assert_eq!(deleted["blocked"], true);
     for url in [&turn_url, &feedback_url, &raw_url] {
-        let response = http.get(url).bearer_auth(&token).send().await.unwrap();
-        assert_eq!(response.status(), 404);
-        let value: Value = response.json().await.unwrap();
-        assert_eq!(value["error"]["code"], "NOT_FOUND");
-        assert!(
-            !value
-                .to_string()
-                .contains(input["answer"].as_str().unwrap())
+        assert_eq!(
+            http.get(url)
+                .bearer_auth(&token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            401
+        );
+        assert_eq!(
+            http.get(url)
+                .bearer_auth(&replacement.token)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            200
         );
     }
-    assert_eq!(
-        http.post(&turns_url)
-            .bearer_auth(&token)
-            .header("Idempotency-Key", "http-turn")
-            .json(&input)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        404
-    );
-    assert_eq!(
-        http.post(&feedback_url)
-            .bearer_auth(&token)
-            .header("Idempotency-Key", "http-feedback")
-            .json(&body)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        404
-    );
 }

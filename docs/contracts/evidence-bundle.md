@@ -71,14 +71,12 @@ value. A question with no visible matched topic yields no consolidated item.
 Keyword matches have `unverified` applicability. An exact caller identity has
 `caller_identity_exact_match`.
 
-The console reopens the source event using writer-or-higher permission and
-checks the byte range against the fixed quote before highlighting. A reader
-can recheck the published excerpt by opening its pinned memory version. Each
-open enforces current source visibility.
+The console reopens the source event with the Workspace Key and checks the fixed
+quote against the original byte range before highlighting. Each open enforces
+current source visibility.
 
-Learning is reader-visible only as its published statement/why, exact conditions
-and sanitized support identifiers/ranges. Raw supporting Q&A and quotes require
-writer authority and ownership of the private session's logical key. Conditions appear in retained text, item metadata and citation
+Published Learning provides the statement, rationale, and exact conditions.
+Raw supporting Q&A and private support pointers require the owning logical Key. Conditions appear in retained text, item metadata and citation
 provenance. Caller context uses exact string membership for every condition;
 `caller_context_exact_match` means only that the caller supplied those strings.
 Otherwise applicability is explicitly `unverified`. No model interprets,

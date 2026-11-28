@@ -298,9 +298,30 @@ fn pdf() -> Vec<u8> {
 #[tokio::test]
 async fn local_host_http_mcp_models_and_recovery() {
     let dir = tempfile::tempdir().unwrap();
-    let bootstrap = crate::support::seed_key_workspace(dir.path(), "local tests").await;
-    let token = bootstrap["token"].as_str().unwrap();
-    let other = crate::support::seed_key_workspace(dir.path(), "other scope").await;
+    let store = SqliteStore::open(dir.path().join("context.db"))
+        .await
+        .unwrap();
+    let scope = Scope {
+        tenant_id: Uuid::new_v4(),
+        workspace_id: Uuid::new_v4(),
+    };
+    let workspace_key = store
+        .create_key_workspace(scope, "local tests")
+        .await
+        .unwrap();
+    let token = workspace_key.token.as_str();
+    let other_key = store
+        .create_key_workspace(
+            Scope {
+                tenant_id: Uuid::new_v4(),
+                workspace_id: Uuid::new_v4(),
+            },
+            "other scope",
+        )
+        .await
+        .unwrap();
+    store.shutdown().await.unwrap();
+    drop(store);
     let slow = Arc::new(AtomicBool::new(false));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let model = format!("http://{}", listener.local_addr().unwrap());
@@ -342,7 +363,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     let isolated = post(
         &http,
         &base,
-        other["token"].as_str().unwrap(),
+        other_key.token.as_str(),
         "/v1/search",
         json!({"query":"approval","mode":"hybrid"}),
     )
@@ -353,7 +374,7 @@ async fn local_host_http_mcp_models_and_recovery() {
             "{base}/v1/assets/{}",
             published["asset_id"].as_str().unwrap()
         ))
-        .bearer_auth(other["token"].as_str().unwrap())
+        .bearer_auth(other_key.token.as_str())
         .send()
         .await
         .unwrap()
@@ -547,7 +568,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     assert_eq!(source["content"], "CAPTURECONFLICT");
     assert_eq!(
         http.get(format!("{base}{source_path}"))
-            .bearer_auth(other["token"].as_str().unwrap())
+            .bearer_auth(other_key.token.as_str())
             .send()
             .await
             .unwrap()
@@ -618,7 +639,7 @@ async fn local_host_http_mcp_models_and_recovery() {
     );
     assert_eq!(
         http.post(format!("{base}/v1/memories/lookup"))
-            .bearer_auth(other["token"].as_str().unwrap())
+            .bearer_auth(other_key.token.as_str())
             .json(&identity)
             .send()
             .await
@@ -1132,7 +1153,7 @@ async fn local_host_http_mcp_models_and_recovery() {
             .contains("Release approval required")
     );
     let administrator = std::fs::read_to_string(dir.path().join("deployment-admin.key")).unwrap();
-    let workspace = bootstrap["workspace_id"].as_str().unwrap();
+    let workspace = scope.workspace_id;
     let replacement = post(
         &http,
         &base,
