@@ -2728,3 +2728,23 @@ Key。沿用共享地址时保留旧配置语义，专用地址只接收本链�
 PR #160 清理后在 Linux / Rust 1.98.0 复跑 `local-storage` 的 `local` 和
 `memory-consolidation` 测试目标，共 222 项通过。默认特性的 `jobs::tests` 6 项通过。
 全目标全特性 Clippy、格式检查与 `git diff --check` 通过。
+
+## 2026-11-28 — 移除旧工作区 Key 管理入口（本地）
+
+基于 main `d8dd128f2dcc5a7551f439a464318ff1ae40d270`，实现提交
+`ab99049f3c8de4ad303f9f15a91a293f25dbd981`。Linux x86_64、Rust 1.98.0，使用全新数据库和合成数据。
+
+- `cargo test --locked --offline --no-fail-fast -j 3` 通过 468 项，忽略 11 项。旧 `/admin/keys`
+  入口返回 404。管理员轮换后旧 Key 无法再访问 HTTP 和 MCP，新 Key 沿用会话和 Run 的逻辑归属。
+- 全特性和仅 SQLite 配置的全目标严格 Clippy、格式检查和 `git diff --check` 通过。
+  仅 SQLite 配置的归档隔离和轮换单元测试通过。
+- `npm --prefix ui run check` 和 33 项 UI 测试通过。Chromium 使用真实本地服务验证工作区创建、
+  Key 轮换、管理员审核、历史版本恢复、原文引用与来源撤回。
+- `tools/mcp_smoke.py --local` 通过。`tools/private_archive_smoke.py` 在内嵌和独立 AnySeek 上均通过，
+  覆盖旧凭据隔离、原文完整性、重放、恢复与还原。Python 工具测试 11 项通过、5 项跳过。
+
+旧角色仍存在于 SQLite 及权限判断。Windows、真实产品客户端与真实模型不在本次本地验证范围内。
+
+提交 PR 前变基到 main `4f69478b0cb68211adef40920f7926641a565777`，实现提交为
+`98b9c6cde3068d64e887f539231e84e40b71de6e`。`git range-diff` 确认实现补丁不变。
+主干已删除两套旧 Python 测试，变基后剩余 3 项 Python 测试均通过。
