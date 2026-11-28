@@ -7,6 +7,14 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · PR #186 构建与远端发布回归
+
+基于 `24d847b`，在 Linux 和 Rust 1.98.0 下复现无特性构建的未使用代码错误。
+修复后，无默认特性与仅 `sqlite` 的严格 Clippy 和完整测试通过。
+使用 CI 固定的独立 AnySeek `6a46fc7` 运行 `tools/anyseek_smoke.py --cargo-tests --binary <origence> --anyseek-binary <anyseek_server>`，
+8 项真实后端契约及 HTTP/MCP 重启冒烟通过。回执丢失测试核对实际发布和续写的操作纪元相同，
+并检查完成后移除 SQLite 的重试记录。
+
 ## 2026-11-28 · 发布重试、证据和检索存储清理
 
 基于 `ca40c0c`（main `9275983`），Linux、Rust 1.98.0、Node 24.22.1，使用隔离的新库。

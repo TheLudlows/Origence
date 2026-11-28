@@ -210,7 +210,7 @@ async fn real_anyseek_scoped_and_search_replay_cleanup_and_source_validation() {
 
 async fn lost_write_proxy() -> (
     String,
-    std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    std::sync::Arc<std::sync::Mutex<Vec<Option<u64>>>>,
     tokio::task::JoinHandle<()>,
 ) {
     use axum::{
@@ -221,17 +221,17 @@ async fn lost_write_proxy() -> (
         routing::any,
     };
     use std::sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
     };
     let backend = std::env::var("OC_ANYSEEK_URL").unwrap();
     let lost = Arc::new(AtomicBool::new(true));
-    let posts = Arc::new(AtomicUsize::new(0));
-    let counted = posts.clone();
+    let epochs = Arc::new(Mutex::new(Vec::new()));
+    let captured = epochs.clone();
     let proxy = Router::new().fallback(any(move |request: Request| {
         let backend = backend.clone();
         let lost = lost.clone();
-        let posts = counted.clone();
+        let epochs = captured.clone();
         async move {
             let method = request.method().clone();
             let path = request.uri().to_string();
@@ -239,6 +239,15 @@ async fn lost_write_proxy() -> (
             let body = to_bytes(request.into_body(), 2 * 1024 * 1024)
                 .await
                 .unwrap();
+            if path.ends_with("/group/replace") {
+                let request: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                let epoch = request["operation_id"]["epoch"].as_u64().unwrap();
+                let removes_group = request["records"].as_array().unwrap().is_empty();
+                epochs
+                    .lock()
+                    .unwrap()
+                    .push((!removes_group).then_some(epoch));
+            }
             let response = reqwest::Client::new()
                 .request(method, format!("{backend}{path}"))
                 .headers(headers)
@@ -249,14 +258,14 @@ async fn lost_write_proxy() -> (
             let status = response.status();
             let response_headers = response.headers().clone();
             let body = response.bytes().await.unwrap();
-            if path.ends_with("/group/replace") {
-                posts.fetch_add(1, Ordering::SeqCst);
-                if status.is_success() && lost.swap(false, Ordering::SeqCst) {
-                    return Response::builder()
-                        .status(503)
-                        .body(Body::from("secret backend diagnostic"))
-                        .unwrap();
-                }
+            if path.ends_with("/group/replace")
+                && status.is_success()
+                && lost.swap(false, Ordering::SeqCst)
+            {
+                return Response::builder()
+                    .status(503)
+                    .body(Body::from("secret backend diagnostic"))
+                    .unwrap();
             }
             let mut response = Response::builder()
                 .status(status)
@@ -273,14 +282,13 @@ async fn lost_write_proxy() -> (
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let server = tokio::spawn(async move { axum::serve(listener, proxy).await.unwrap() });
-    (base, posts, server)
+    (base, epochs, server)
 }
 
 #[tokio::test]
 #[ignore = "requires real AnySeek; verifies a committed write with a lost HTTP response"]
 async fn real_anyseek_lost_write_response_is_verified_without_resubmission() {
-    use std::sync::atomic::Ordering;
-    let (base, posts, server) = lost_write_proxy().await;
+    let (base, epochs, server) = lost_write_proxy().await;
     let store = AnySeekFullTextStore::new(
         AnySeekConfig::new(&base, &std::env::var("OC_ANYSEEK_API_KEY").unwrap()).unwrap(),
     )
@@ -297,7 +305,7 @@ async fn real_anyseek_lost_write_response_is_verified_without_resubmission() {
         .upsert(scope, vec![original.clone()], epoch.saturating_sub(5))
         .await
         .unwrap();
-    assert_eq!(posts.load(Ordering::SeqCst), 1);
+    assert_eq!(*epochs.lock().unwrap(), vec![Some(epoch)]);
     let (q, expected) = query(scope, std::slice::from_ref(&original), "response");
     assert_eq!(store.search(q, &expected).await.unwrap()[0].id, original.id);
     store
@@ -415,7 +423,7 @@ mod service_contract {
     #[tokio::test]
     #[ignore = "requires real AnySeek; verifies pending publication recovery after a lost write response"]
     async fn anyseek_pending_publication_reopens_with_its_saved_epoch() {
-        let (base, posts, proxy) = lost_write_proxy().await;
+        let (base, epochs, proxy) = lost_write_proxy().await;
         let config =
             || AnySeekConfig::new(&base, &std::env::var("OC_ANYSEEK_API_KEY").unwrap()).unwrap();
         let dir = tempfile::tempdir().unwrap();
@@ -447,8 +455,24 @@ mod service_contract {
                 .await
                 .unwrap();
         let saved: Value = serde_json::from_str(&saved).unwrap();
-        let epoch = saved["publication"]["full_text_operation_epoch"].clone();
-        assert!(epoch.is_u64());
+        assert!(saved.get("publication").is_none());
+        let retry = &saved["lexical_publication"];
+        let epoch = retry["epoch"].as_u64().unwrap();
+        assert!(
+            retry["digest"]
+                .as_str()
+                .is_some_and(|digest| digest.len() == 64)
+        );
+        assert_eq!(
+            epochs
+                .lock()
+                .unwrap()
+                .iter()
+                .flatten()
+                .copied()
+                .collect::<Vec<_>>(),
+            vec![epoch]
+        );
         service.engine.shutdown().await.unwrap();
         drop(service);
         let service = Service::open_with_anyseek(dir.path(), Models::disabled(), config())
@@ -475,7 +499,8 @@ mod service_contract {
                 .await
                 .unwrap();
         let after: Value = serde_json::from_str(&after).unwrap();
-        assert_eq!(after["publication"]["full_text_operation_epoch"], epoch);
+        assert!(after.get("publication").is_none());
+        assert!(after.get("lexical_publication").is_none());
         let input =
             serde_json::from_value(json!({"query":"token recovery","mode":"keyword"})).unwrap();
         assert!(
@@ -484,7 +509,12 @@ mod service_contract {
                 .unwrap()
                 .is_empty()
         );
-        assert_eq!(posts.load(std::sync::atomic::Ordering::SeqCst), 3);
+        // The first write committed, cleanup removed the unpublished group,
+        // and the resumed write reused the original operation epoch.
+        assert_eq!(
+            *epochs.lock().unwrap(),
+            vec![Some(epoch), None, Some(epoch)]
+        );
         service.engine.shutdown().await.unwrap();
         proxy.abort();
     }
@@ -550,12 +580,9 @@ mod service_contract {
                 .fetch_one(service.engine.relational().pool())
                 .await
                 .unwrap();
-        let plan: Value = serde_json::from_str(&saved).unwrap();
-        assert!(
-            plan["publication"]["full_text_operation_epoch"]
-                .as_u64()
-                .is_some()
-        );
+        let payload: Value = serde_json::from_str(&saved).unwrap();
+        assert!(payload.get("publication").is_none());
+        assert!(payload.get("lexical_publication").is_none());
         service.engine.shutdown().await.unwrap();
         drop(service);
         let service = Service::open_with_anyseek(dir.path(), Models::disabled(), config())

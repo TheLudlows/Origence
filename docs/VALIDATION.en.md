@@ -4,6 +4,16 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · PR #186 build and remote publication checks
+
+Based on `24d847b`. Linux with Rust 1.98.0 reproduced the unused-code error in the build
+without default features. Strict Clippy and the full test suites passed without default
+features and with only `sqlite` after the fix.
+`tools/anyseek_smoke.py --cargo-tests --binary <origence> --anyseek-binary <anyseek_server>`
+passed eight real-backend contracts and the HTTP/MCP restart smoke using CI's pinned
+standalone AnySeek `6a46fc7`. The lost-response test checks that the first and resumed
+writes use the same operation epoch and that completion clears the SQLite retry record.
+
 ## 2026-11-28 · Publication retry, evidence, and retrieval storage cleanup
 
 Based on `ca40c0c` (main `9275983`). Linux checks used Rust 1.98.0, Node 24.22.1,

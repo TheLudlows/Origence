@@ -42,6 +42,7 @@ pub struct RunVerificationLink {
     pub external_ref: String,
 }
 
+#[cfg(feature = "sqlite")]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub(crate) enum VerificationInput {
@@ -49,6 +50,7 @@ pub(crate) enum VerificationInput {
     Transcribed(RunVerificationInput),
 }
 
+#[cfg(feature = "sqlite")]
 impl VerificationInput {
     pub(crate) fn binding(&self) -> (Uuid, i64, &str) {
         match self {
