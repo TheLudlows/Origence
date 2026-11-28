@@ -1,6 +1,6 @@
 // Chromium regression through the built console, real API and worker, and a synthetic extraction endpoint.
 const assert = require("node:assert/strict");
-const { execFileSync, spawn } = require("node:child_process");
+const { spawn } = require("node:child_process");
 const { once } = require("node:events");
 const { mkdtemp, rm } = require("node:fs/promises");
 const { createServer } = require("node:http");
@@ -8,6 +8,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { setTimeout: sleep } = require("node:timers/promises");
 const { chromium } = require("playwright");
+const { seedWorkspace } = require("./browser-fixture-workspaces.cjs");
 const { createFixtureUiServer, fixtureAccounts, fixtureSignIn } = require("./browser-fixture-accounts.cjs");
 
 const bin = process.env.ORIGENCE_BIN ?? join(__dirname, "../../target/debug/origence");
@@ -66,9 +67,7 @@ async function preview(page, origin, role, date) {
     const modelOrigin = await listen(model);
     const apiOrigin = await listen(reservation);
     await new Promise((resolve) => reservation.close(resolve));
-    const offline = (...args) => JSON.parse(execFileSync(bin, ["--data-dir", dir, "--offline", ...args], { encoding: "utf-8" }));
-    const writer = offline("workspace-create", "synthetic policy fixture");
-    const reader = offline("key-create", writer.workspace_id, "--role", "reader");
+    const writer = seedWorkspace(dir, "synthetic policy fixture");
     host = spawn(bin, ["--data-dir", dir, "serve", "--local", "--bind", new URL(apiOrigin).host], {
       env: { ...process.env, OC_ENABLE_MODELS: "true", OC_EMBEDDING_MODEL: "", OC_EXTRACTION_BASE_URL: modelOrigin, OC_EXTRACTION_MODEL: "fixture", OC_MODEL_API_KEY: "fixture", RUST_LOG: "warn" },
       stdio: ["ignore", "ignore", "inherit"],
@@ -83,6 +82,9 @@ async function preview(page, origin, role, date) {
       headers: { Authorization: `Bearer ${writer.token}`, "Content-Type": "application/json", ...(key ? { "Idempotency-Key": key } : {}) },
       body: body && JSON.stringify(body),
     });
+    const issued = await api("/admin/keys", { workspace_id: writer.workspace_id, role: "reader" });
+    assert.equal(issued.status, 200);
+    const reader = await issued.json();
     assert.equal((await api("/admin/memory-properties", { predicate, cardinality: "single", required_context: ["region"] }, "property")).status, 200);
     const retain = async (content, key) => {
       const response = await api("/v1/memories/retain", { content }, key);

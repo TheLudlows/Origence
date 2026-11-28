@@ -21,6 +21,7 @@ import urllib.request
 import uuid
 
 from mcp_smoke import Host, Mcp, isolated_env, require
+from native_fixture import workspace as seed_workspace
 
 
 def call(base, path, key, body=None):
@@ -37,33 +38,6 @@ def call(base, path, key, body=None):
         raise RuntimeError(f"AnySeek fixture HTTP {error.code}") from None
 
 
-def schema(dimension=None):
-    fields = ["format", "kind", "tenant", "workspace", "chunk_id", "source_id", "source_version", "generation", "publication", "profile", "dimension"]
-    result = [{"field": name, "field_type": "String", "store": True,
-               "index_lexical": False, "index_vector": False, "filterable": True, "boost": 1.0}
-              for name in fields]
-    for field in ("terms", "summary_terms"):
-        result.append({"field": field, "field_type": "Text", "store": True,
-                       "index_lexical": True, "index_vector": False, "filterable": False, "boost": 1.0})
-    for name, field_type, filterable in [
-        ("payload", "Json", False),
-        ("graph", "Json", False),
-        ("endpoint_ids", "StringSet", True),
-        ("graph_keys", "StringSet", True),
-    ]:
-        result.append({"field": name, "field_type": field_type, "store": True,
-                       "index_lexical": False, "index_vector": False,
-                       "filterable": filterable, "boost": 1.0})
-    config = {"index_name": "origence-content-sha256-v1", "schema": result,
-              "tokenizer": "TantivySimpleV1", "text_normalization": "None", "stop_words": "None"}
-    if dimension is not None:
-        require(1 <= dimension <= 4096, "invalid fixture vector dimension")
-        result.append({"field": "vector", "field_type": "Json", "store": True,
-                       "index_lexical": False, "index_vector": True, "filterable": False, "boost": 1.0})
-        config["vector"] = {"dimensions": dimension}
-    return config
-
-
 def wait_ready(process, base, key):
     deadline = time.monotonic() + 60
     while True:
@@ -78,13 +52,7 @@ def wait_ready(process, base, key):
 
 def mcp_contract(binary, env, directory):
     env = dict(env, OC_DATA_DIR=str(Path(directory) / "origence"), OC_ENABLE_MODELS="false")
-    advertised = subprocess.run([binary, "anyseek-schema"], env=env, capture_output=True, timeout=30)
-    require(advertised.returncode == 0 and json.loads(advertised.stdout) == schema(),
-            "CLI AnySeek schema differs from the workspace collection contract")
-    bootstrap = subprocess.run([binary, "--offline", "workspace-create", "AnySeek smoke"],
-        env=env, capture_output=True, timeout=60)
-    require(bootstrap.returncode == 0, "Origence bootstrap failed")
-    workspace = json.loads(bootstrap.stdout)
+    workspace = seed_workspace(env, "AnySeek smoke")
     token = workspace["token"]
     env["OC_API_KEY"] = token
     forbidden = [token, env["OC_ANYSEEK_API_KEY"]]
@@ -156,9 +124,7 @@ def embedded_contract(binary):
             env.pop(name, None)
         env.update(ANYSEEK_STORAGE_BACKEND="s3", PATH="")
         serve_args = ["--local"]
-        workspace = subprocess.run([binary, "--offline", "workspace-create", "local smoke"],
-                                   env=env, check=True, capture_output=True, timeout=30)
-        token = json.loads(workspace.stdout)["token"]
+        token = seed_workspace(env, "local smoke")["token"]
         old = "Embedded local search requires approval."
         new = "Embedded local search requires review."
         with Host(binary, env, token, [token], serve_args) as host:

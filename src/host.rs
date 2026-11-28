@@ -2,6 +2,9 @@ use crate::{api, service::Service, worker};
 use std::future::Future;
 use tokio::{net::TcpListener, sync::watch};
 
+mod deployment_admin;
+pub use deployment_admin::initialize_deployment_admin;
+
 /// Report the CLI listener address, then run the HTTP server and worker.
 pub async fn serve_http(
     service: Service,

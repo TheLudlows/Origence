@@ -9,8 +9,9 @@ import tempfile
 import time
 from urllib.error import HTTPError
 
-from live_skill_preflight import (Host, claude_turn, codex_turn, export, installed, isolated_env,
+from live_skill_preflight import (Host, claude_turn, codex_turn, fixture_skill, installed, isolated_env,
                                   main, publish_from_source, require, sha, uid)
+from native_fixture import workspace as seed_workspace
 
 
 CASES = {
@@ -163,7 +164,7 @@ def rehearse(args, root, host, space, keys, case_name, case, record, deadline):
     record["private_candidate_http"] = denied_private(host, "/v1/skill-candidates/" + approval["candidate_id"])
     project = root / "second" / consumer
     project.parent.mkdir(parents=True)
-    require(export(args.binary, host, host.token, project, consumer, package).returncode == 0, "peer export failed")
+    fixture_skill(host, project, consumer, package)
     path = installed(project, consumer, package)
     second_run = uid()
     host.request("/v1/runs", {"run_id": second_run, "summary": "Public second case " + case_name})
@@ -197,9 +198,7 @@ def run_scenario(args, name, case, record, deadline):
         root = Path(directory)
         env = isolated_env(directory)
         require("OC_ANYSEEK_API_KEY" in env, "run under tools/anyseek_smoke.py")
-        boot = subprocess.run([args.binary, "--offline", "workspace-create", "public-handoff"],
-                              cwd=root, env=env, capture_output=True, check=True, timeout=15)
-        space = json.loads(boot.stdout)
+        space = seed_workspace(env, "public-handoff")
         admin = space["token"]
         with Host(args.binary, env, admin, [admin, env["OC_ANYSEEK_API_KEY"]]) as host:
             keys = {}

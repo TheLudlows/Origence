@@ -88,6 +88,40 @@ HTTP 测试覆盖已移除的管理员多 Key 操作和子工作区列表、保�
 `check-console-session-browser.cjs` 和 `check-key-management-browser.cjs`，覆盖新管理员名称、登录、
 平级工作区创建、密钥轮换和全局知识审核。浏览器使用回环服务和合成数据。原生 Windows 待运行。
 
+## 2026-11-28 · 删除旧的 `api` 启动命令
+
+基于 main `c716e0c` 与 #187 的客户端模块清理提交 `4877b20`。Linux、Rust 1.98.0，使用合成测试材料。
+
+- `cargo fmt --all -- --check` 与 `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` 通过。严格 Clippy 同时通过 `--no-default-features --features host` 和 `--no-default-features --features sqlite`。
+- `cargo test --offline --locked --test local -j 3 local_app::` 通过 12 项。旧命令返回参数错误，`serve` 重开后仍能通过 HTTP 查询。实际 Node Hook 和双端私有归档的两项定向回归同样通过。- `cargo test --offline --locked --no-default-features --features host --test anyseek -j 3` 通过 7 项，需真实 AnySeek 的 8 项保持忽略。用 `tools/plugin_smoke.py --bind 127.0.0.1:0` 在客户端 PATH 无 Origence 二进制时验证 Codex 0.171.0 和 Claude Code 2.1.330，两端均通过。Windows 未在本地运行。
+
+
+## 2026-11-28 · 移除 Rust 客户端模块
+
+基于 Origence main `496960f` 与 #187 的共享 Hook 提交 `f314875`。环境为 Linux、Rust 1.98.0、Node.js 24.22.1。客户端输入和模型响应均为合成材料。
+
+- `cargo fmt --all -- --check` 和 `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` 通过。严格 Clippy 也在 `--no-default-features --features local-storage` 和 `--no-default-features --features sqlite` 两种组合通过。
+- `cargo test --offline --locked --test local` 的定向过滤 `agent_hooks::`（1 项）、`turn_sync::`（1 项）、`mcp_runs::`（3 项）、`foundation_http::`（3 项）和 `local_app::cli_exposes_only_serve`（1 项）通过。覆盖安装入口、队列重试、私有归档、MCP 复用 Run 身份及授权 Skill 包下载。`cargo test --offline --locked --test skill-workflow -j 3` 通过独立的起草、审批、发布和撤回回归（1 项）。
+- `node --disable-warning=ExperimentalWarning --test tools/plugin-hook.test.mjs` 通过 3 项，`python3 -m unittest discover -s evals/pilot -p 'test_*.py'` 通过 58 项。独立合成夹具检查把下载的 Markdown 与文本引用写到两种测试项目布局，并核对收到 HTTP 404 时未创建目标目录。
+- `python3 tools/plugin_smoke.py --binary <origence> --claude <claude> --codex <codex> --bind 127.0.0.1:0` 用 Codex 0.171.0 和 Claude Code 2.1.330 验证通过。本地未验证 Windows 或真实模型的 Skill 加载。
+
+## 2026-11-28 · 共享 Node.js Agent Hook
+
+基于 #187 的 `8b051a9`，Linux、Rust 1.98.0、Node.js 24.22.1。Codex 0.171.0 和 Claude Code 2.1.330 使用合成 HTTP 及模型响应。
+
+- `node --disable-warning=ExperimentalWarning --test tools/plugin-hook.test.mjs` 通过 3 项，覆盖进程锁互斥及异常退出后的恢复、事件适配和归档脱敏。
+- Rust 集成测试过滤 `local_app::cli_exposes_only_serve`、`client_hooks::` 与 `turn_sync::`，通过 1、6、1 项。验证 Rust 主程序入口、真实 Run 和归档接口、权限隔离和回执丢失重试。
+- `python3 tools/plugin_smoke.py --binary <origence> --claude <claude> --codex <codex> --bind 127.0.0.1:0` 和 `python3 tools/installer_smoke.py --binary <origence> --claude <claude> --codex <codex>` 通过。两端安装同一包并在客户端 PATH 无 Origence 二进制时上报。
+- 用旧 Rust Hook 生成失败待重试的 Run 和私有问答队列。退出旧进程后，Node.js 从原 v1 文件重试。两端均保持原作用域、事件 ID 和 JSON 内容。Windows 和真实模型未在本地运行。
+
+## 2026-11-28 · 精简 CLI 与启动登记管理员
+
+基于 main `340aa50`。Linux、Rust 1.98.0、Node 24，全部使用合成数据和临时目录。
+
+- `cargo fmt --all -- --check` 通过。默认构建和独立 AnySeek 宿主构建均通过 `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings`，后者加 `--no-default-features --features local-storage`。
+- `cargo test --offline --locked --test local -j 3` 分别按 `local_app::`、`client_hooks::` 和 `workspace_access::` 过滤，12、6、5 项通过。验证二进制命令面、兼容别名、存量管理员不被更换、在线创建工作空间和实际 Hook。
+- `python3 tools/anyseek_smoke.py --embedded --binary <origence>`、`python3 tools/mcp_smoke.py --local --binary <origence>`、`python3 tools/private_archive_smoke.py --binary <origence>` 及 `npm test --prefix ui` 通过。真实本地安装器和控制台验证普通安装、拒绝 `--init`、重装以及卸载保留数据。
+- 未在 Windows 或 Docker 上执行本改动的验证，也未启动真实模型或原生 Claude Code / Codex 联调。
 ## 2026-11-28 · 宿主构建特性简化
 
 基于 main `496960f`，Linux 和 Rust 1.98.0。默认构建、仅 `host` 和仅 `sqlite` 三种构建的

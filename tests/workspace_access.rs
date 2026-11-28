@@ -1091,22 +1091,12 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
     service.engine.shutdown().await.unwrap();
 }
 
-async fn bootstrap(dir: &std::path::Path, name: &str) -> serde_json::Value {
-    let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
-    command
-        .args(["--offline", "workspace-create", name])
-        .env("OC_DATA_DIR", dir);
-    let output = command.output().await.unwrap();
-    assert!(output.status.success(), "workspace bootstrap failed");
-    serde_json::from_slice(&output.stdout).unwrap()
-}
-
 #[tokio::test]
 async fn admin_key_inventory_is_scoped_paginated_and_reflects_credential_lifecycle() {
     let dir = tempfile::tempdir().unwrap();
-    let a = bootstrap(dir.path(), "A").await;
+    let a = crate::support::seed_workspace(dir.path(), "A", None).await;
     let a_id: Uuid = a["workspace_id"].as_str().unwrap().parse().unwrap();
-    let other = bootstrap(dir.path(), "Other tenant").await;
+    let other = crate::support::seed_workspace(dir.path(), "Other tenant", None).await;
     let service = open_service(dir.path(), Models::disabled()).await.unwrap();
     let a_token = a["token"].as_str().unwrap();
     let a_admin = service.auth(a_token).await.unwrap();

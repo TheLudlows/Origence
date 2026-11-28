@@ -902,3 +902,15 @@ fn source(r: &Value) -> SourceVersion {
             .unwrap(),
     }
 }
+
+mod fixture_workspace;
+
+pub async fn seed_workspace(
+    dir: &Path,
+    name: &str,
+    parent: Option<uuid::Uuid>,
+) -> serde_json::Value {
+    fixture_workspace::seed_workspace(dir, name, parent, false)
+        .await
+        .unwrap()
+}

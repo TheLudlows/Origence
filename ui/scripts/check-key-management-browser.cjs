@@ -1,13 +1,14 @@
 // Real Chromium and Origence, with disposable loopback workspaces and tokens.
 const assert = require("node:assert/strict");
-const { randomUUID } = require("node:crypto");
-const { execFileSync, spawn } = require("node:child_process");
+const { randomUUID, randomBytes } = require("node:crypto");
+const { spawn } = require("node:child_process");
 const { once } = require("node:events");
 const { mkdtemp, rm } = require("node:fs/promises");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const { createInterface } = require("node:readline");
 const { chromium } = require("playwright");
+const { seedWorkspace } = require("./browser-fixture-workspaces.cjs");
 
 const password = "console-key-fixture-password";
 
@@ -27,13 +28,11 @@ async function run(binary) {
   const secrets = [];
   let host, ui, browser, stderr = "";
   try {
-    const bootstrap = (name, ...args) => JSON.parse(execFileSync(binary,
-      ["--offline", "workspace-create", name, ...args], { cwd: directory, env, encoding: "utf8" }));
-    const a = bootstrap("研发", "--workspace-key");
-    const b = bootstrap("运营", "--workspace-key");
-    const legacy = bootstrap("旧凭据工作区");
-    const { token: deploymentKey } = JSON.parse(execFileSync(binary, ["--offline", "deployment-admin-rotate"],
-      { cwd: directory, env, encoding: "utf8" }));
+    const a = seedWorkspace(directory, "研发", undefined, true);
+    const b = seedWorkspace(directory, "运营", a.workspace_id, true);
+    const legacy = seedWorkspace(directory, "旧凭据工作区");
+    const deploymentKey = "oc_admin_" + randomBytes(32).toString("hex");
+    env.OC_DEPLOYMENT_ADMIN_KEY = deploymentKey;
     secrets.push(a.token, b.token, legacy.token, deploymentKey);
     host = spawn(binary, ["serve", "--local", "--bind", "127.0.0.1:0"], { cwd: directory, env });
     host.stderr.setEncoding("utf8").on("data", (chunk) => { stderr = (stderr + chunk).slice(-65536); });

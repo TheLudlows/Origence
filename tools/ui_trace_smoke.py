@@ -10,8 +10,9 @@ from urllib.error import HTTPError
 import uuid
 
 from live_archive_smoke import child_environment
+from native_fixture import workspace as seed_workspace
 from mcp_smoke import Host, isolated_env, require, sanitized
-from plugin_smoke import bootstrap, codex_session, execute, tool_value
+from plugin_smoke import codex_session, execute, tool_value
 
 QUERY = "ExpensePilotFixture"
 POLICIES = {1: 120, 2: 80, 3: 60}
@@ -112,7 +113,7 @@ def main():
         project = root / "project"
         project.mkdir()
         env = isolated_env(temporary)
-        workspace = bootstrap(binary, root, env, "Synthetic trace acceptance")
+        workspace = seed_workspace(env, "Synthetic trace acceptance")
         owner = workspace["token"]
         forbidden = [owner]
         with Host(str(binary), env, owner, forbidden, serve_args=("--local",)) as host:

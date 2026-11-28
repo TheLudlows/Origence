@@ -6,8 +6,7 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence plugin-hook --client codex",
-            "commandWindows": "origence.exe plugin-hook --client codex"
+            "command": "node --disable-warning=ExperimentalWarning -e \"require(require('node:path').join(process.env.PLUGIN_ROOT, 'hooks', 'entry.mjs')).run('codex')\""
           }
         ]
       }
@@ -18,8 +17,7 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence plugin-hook --client codex",
-            "commandWindows": "origence.exe plugin-hook --client codex"
+            "command": "node --disable-warning=ExperimentalWarning -e \"require(require('node:path').join(process.env.PLUGIN_ROOT, 'hooks', 'entry.mjs')).run('codex')\""
           }
         ],
         "matcher": "^(Bash|apply_patch|mcp__(origence|plugin_origence_origence)__(context_search|context_get|context_run_create|context_run_report|context_run_prepare|context_run_get))$"
@@ -31,8 +29,7 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence plugin-hook --client codex",
-            "commandWindows": "origence.exe plugin-hook --client codex"
+            "command": "node --disable-warning=ExperimentalWarning -e \"require(require('node:path').join(process.env.PLUGIN_ROOT, 'hooks', 'entry.mjs')).run('codex')\""
           }
         ]
       }
@@ -43,8 +40,7 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence plugin-hook --client codex",
-            "commandWindows": "origence.exe plugin-hook --client codex"
+            "command": "node --disable-warning=ExperimentalWarning -e \"require(require('node:path').join(process.env.PLUGIN_ROOT, 'hooks', 'entry.mjs')).run('codex')\""
           }
         ]
       }
@@ -55,8 +51,7 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence plugin-hook --client codex",
-            "commandWindows": "origence.exe plugin-hook --client codex"
+            "command": "node --disable-warning=ExperimentalWarning -e \"require(require('node:path').join(process.env.PLUGIN_ROOT, 'hooks', 'entry.mjs')).run('codex')\""
           }
         ]
       }

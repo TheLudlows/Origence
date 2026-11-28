@@ -18,7 +18,7 @@ Origence 是面向智能体的统一数据底座，涵盖记忆、知识、Skill
 | 当前代码的组件、存储分工与一致性 | [实现架构](design/current-implementation.md) |
 | HTTP、MCP 与公开库接口 | [API](API.md) |
 | 配置、部署、故障处理与备份恢复 | [OPERATIONS](OPERATIONS.md) |
-| Claude Code / Codex 接入与 Skill 导出 | [CLIENTS](CLIENTS.md) |
+| Claude Code / Codex 接入 | [CLIENTS](CLIENTS.md) |
 | 精确版本的测试结果、失败与验证边界 | [VALIDATION](VALIDATION.md) |
 
 目标架构描述要交付的产品，不作为能力已经实现的证明；当前进度只在 STATUS 维护，

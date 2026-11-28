@@ -18,7 +18,7 @@ The first release targets pilot use by internal engineering and business teams o
 | Current components, storage responsibilities, and consistency | [Implementation architecture](design/current-implementation.en.md) |
 | HTTP, MCP, and public library interfaces | [API](API.en.md) |
 | Configuration, deployments, failures, backup and restore | [OPERATIONS](OPERATIONS.en.md) |
-| Claude Code / Codex integration and Skill export | [CLIENTS](CLIENTS.en.md) |
+| Claude Code / Codex integration | [CLIENTS](CLIENTS.en.md) |
 | Test results, failures, and verification limits for precise revisions | [VALIDATION](VALIDATION.en.md) |
 
 The target architecture describes the product to be delivered. Implementation status is maintained in STATUS, and test results in VALIDATION. Domain contracts do not repeat milestone schedules or historical test counts.

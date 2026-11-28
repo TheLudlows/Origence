@@ -3,6 +3,7 @@ x-local: &local
   build: .
   environment:
     OC_DATA_DIR: /data
+    OC_DEPLOYMENT_ADMIN_KEY: ${OC_DEPLOYMENT_ADMIN_KEY:-}
     OC_MCP_PUBLIC_ORIGIN: ${OC_MCP_PUBLIC_ORIGIN:-}
     OC_ENABLE_MODELS: ${OC_ENABLE_MODELS:-false}
     OC_ANYSEEK_URL: ${OC_ANYSEEK_URL:-}
@@ -31,11 +32,6 @@ services:
     ports: ["127.0.0.1:${OC_HTTP_PORT:-8080}:8080"]
     stop_grace_period: 120s
     restart: unless-stopped
-  admin:
-    <<: *local
-    profiles: [tools]
-    # Offline commands require the host to be stopped first.
-    command: [--help]
 
 volumes:
   data:

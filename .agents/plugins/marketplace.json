@@ -3,7 +3,7 @@
   "plugins": [
     {
       "name": "origence",
-      "source": { "source": "local", "path": "./plugins/codex/origence" },
+      "source": { "source": "local", "path": "./plugins/origence" },
       "policy": { "installation": "AVAILABLE", "authentication": "ON_USE" },
       "category": "Productivity"
     }

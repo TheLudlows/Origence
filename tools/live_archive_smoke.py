@@ -13,6 +13,7 @@ import time
 from urllib.error import HTTPError
 import uuid
 
+from native_fixture import workspace as seed_workspace
 from mcp_smoke import Host, isolated_env, require
 
 
@@ -244,9 +245,7 @@ def main():
                 root = Path(folder)
                 env = isolated_env(folder)
                 require("OC_ANYSEEK_API_KEY" in env, "run under tools/anyseek_smoke.py --run")
-                boot = subprocess.run([args.binary, "--offline", "workspace-create", "synthetic-archive"],
-                                      cwd=root, env=env, capture_output=True, check=True, timeout=15)
-                workspace = json.loads(boot.stdout)
+                workspace = seed_workspace(env, "synthetic-archive")
                 admin = workspace["token"]
                 with Host(args.binary, env, admin, [admin, env["OC_ANYSEEK_API_KEY"]]) as host:
                     def issue(role):

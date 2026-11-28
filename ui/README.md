@@ -21,15 +21,11 @@ npm start
 
 ### 工作空间 Key 登录
 
-宿主停机时运行 `origence --offline workspace-create --workspace-key <名称>` 创建空间，然后启动 API 和控制台。用签发的 Key 登录控制台或配置 Agent。控制台打开该 Key 对应的空间，支持读取归档问答和管理记忆。轮换使用 `origence --offline workspace-key-rotate <工作空间 ID>`，再用新 Key 登录。
-
-已配置控制台账号时，登录页默认显示账号密码。点击表单下方的「用 Key 登录」可改用工作空间 Key 或部署管理员 Key。未配置账号时，页面直接显示 Key 输入框。
-
-`origence-deploy install --init <名称>` 会配置初始部署管理员账号。用户也可以用工作空间 Key 登录。手动运行仅使用 Key 的控制台时可用 `npm start -- --key-only`。
+启动 API 后，用部署管理员在控制台创建工作空间。使用工作空间 Key 登录该空间或配置 Agent。已配置控制台账号时，可以在登录页切换到「用 Key 登录」。
 
 ### 部署管理员
 
-宿主停机时运行 `origence --offline deployment-admin-rotate` 签发或轮换部署管理员 Key。用该 Key 从控制台的「访问 Key」入口登录，选择任意工作空间，便可查看其原始会话、Run、已发布记忆和知识。轮换后旧 Key 及其登录会话失效。
+使用首次启动写入数据目录的 `deployment-admin.key` 登录。通过 `origence-deploy install` 启动的本地控制台也可使用安装器设置的管理员账号。部署管理员可以创建工作空间、管理凭据并查看各空间归档和 Run。
 
 ### 全局知识
 

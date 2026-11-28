@@ -101,6 +101,40 @@ protocol negotiation, tool contracts, and revocation.
 Node type checking and 34 UI tests passed. Chromium 156.0.8078.79 passed `check-console-session-browser.cjs`
 and `check-key-management-browser.cjs` with loopback services and synthetic data, covering the administrator
 label, sign-in, peer workspace creation, key rotation, and global knowledge review. Native Windows is pending.
+## 2026-11-28 · Remove the old `api` startup command
+
+Based on main `c716e0c` and #187's client module removal `4877b20`. Linux, Rust 1.98.0, synthetic test data.
+
+- `cargo fmt --all -- --check` and `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` passed. Strict Clippy also passed with `--no-default-features --features host` and `--no-default-features --features sqlite`.
+- `cargo test --offline --locked --test local -j 3 local_app::` passed all 12 tests. The old command returns an argument error, and `serve` handles HTTP search after reopening storage. Two targeted tests of the installed Node hook and private archives for both clients also passed.- `cargo test --offline --locked --no-default-features --features host --test anyseek -j 3` passed 7 tests. Eight tests requiring real AnySeek remained ignored. `tools/plugin_smoke.py --bind 127.0.0.1:0` passed for Codex 0.171.0 and Claude Code 2.1.330 with no Origence binary on the client PATH. Windows was outside local verification.
+
+
+## 2026-11-28 · Rust client module removal
+
+Based on Origence main `496960f` and #187's shared Hook commit `f314875`. Linux with Rust 1.98.0 and Node.js 24.22.1. All client inputs and model responses were synthetic.
+
+- `cargo fmt --all -- --check` and `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` passed. Clippy also passed with `--no-default-features --features local-storage` and with `--no-default-features --features sqlite`.
+- `cargo test --offline --locked --test local` passed these targeted filters: `agent_hooks::` (1), `turn_sync::` (1), `mcp_runs::` (3), `foundation_http::` (3), and `local_app::cli_exposes_only_serve` (1). These exercise the installed Node hook, queue retries, private archives, identity reuse through MCP, and authorized Skill package downloads. `cargo test --offline --locked --test skill-workflow -j 3` passed the standalone drafting, review, publication, and withdrawal workflow (1).
+- `node --disable-warning=ExperimentalWarning --test tools/plugin-hook.test.mjs` passed 3 tests and `python3 -m unittest discover -s evals/pilot -p 'test_*.py'` passed 58 tests. A standalone synthetic fixture check staged the downloaded Markdown and text references in both project layouts and verified that a 404 left the destination absent.
+- `python3 tools/plugin_smoke.py --binary <origence> --claude <claude> --codex <codex> --bind 127.0.0.1:0` passed with Codex 0.171.0 and Claude Code 2.1.330. Local verification did not include Windows or live-model Skill loading.
+
+## 2026-11-28 · Shared Node.js Agent hook
+
+Based on #187 at `8b051a9`. Linux, Rust 1.98.0, and Node.js 24.22.1. Codex 0.171.0 and Claude Code 2.1.330 used synthetic HTTP and model responses.
+
+- `node --disable-warning=ExperimentalWarning --test tools/plugin-hook.test.mjs` passed three tests covering process lock exclusion and recovery after termination, event adapters, and archive redaction.
+- Rust integration test filters `local_app::cli_exposes_only_serve`, `client_hooks::`, and `turn_sync::` passed 1, 6, and 1 tests. These cover the server CLI, real Run and archive interfaces, authorization boundaries, and lost receipts.
+- `python3 tools/plugin_smoke.py --binary <origence> --claude <claude> --codex <codex> --bind 127.0.0.1:0` and `python3 tools/installer_smoke.py --binary <origence> --claude <claude> --codex <codex>` passed. Both clients installed the shared package and reported Runs with no Origence binary on the client PATH.
+- The previous Rust hook wrote pending Run and private archive records. After it exited, Node.js replayed the original v1 files with the same scopes, event IDs, and JSON payloads for both clients. Windows and live models were outside local verification.
+
+## 2026-11-28 · CLI reduction and startup administrator registration
+
+Based on main `340aa50`. Linux, Rust 1.98.0, Node 24, with synthetic data in temporary directories.
+
+- `cargo fmt --all -- --check` passed. `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` passed for the default build and for the standalone AnySeek host build with `--no-default-features --features local-storage`.
+- `cargo test --offline --locked --test local -j 3` passed 12, 6, and 5 tests filtered by `local_app::`, `client_hooks::`, and `workspace_access::`. They cover the binary command surface, the compatibility alias, preservation of the existing administrator, online workspace provisioning, and the actual hook.
+- `python3 tools/anyseek_smoke.py --embedded --binary <origence>`, `python3 tools/mcp_smoke.py --local --binary <origence>`, `python3 tools/private_archive_smoke.py --binary <origence>`, and `npm test --prefix ui` passed. The local installer and console accepted plain install, rejected `--init`, and preserved data across reinstall and uninstall.
+- Windows, Docker, live models, and native Claude Code / Codex sessions were outside this local verification.
 ## 2026-11-28 · Host build feature simplification
 
 Based on main `496960f`, using Linux and Rust 1.98.0. `cargo clippy --locked --offline

@@ -1,6 +1,7 @@
 """No-model release/container smoke test; uses an isolated data directory/volume."""
 import argparse
 from anyseek_fixture_env import configure_fixture
+from native_fixture import admin_env
 import json
 import os
 from pathlib import Path
@@ -30,36 +31,23 @@ def main():
             del env[key]
     configure_fixture(env)
     env["OC_ENABLE_MODELS"] = "false"
+    token = admin_env(env)
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with tempfile.TemporaryDirectory(prefix=name) as directory:
         env["OC_DATA_DIR"] = directory
         with tempfile.TemporaryFile(mode="w+t") as log:
             try:
                 if args.image:
-                    prefix = ["docker", "run", "--rm", "-v", volume + ":/data",
-                              "-e", "OC_ENABLE_MODELS=false", args.image]
-                else:
-                    prefix = [str(Path(args.binary).resolve())]
-                bootstrap = subprocess.run(prefix + ["--offline", "workspace-create", "smoke"],
-                                           env=env, capture_output=True, text=True, timeout=120)
-                if bootstrap.returncode:
-                    raise RuntimeError("workspace bootstrap failed")
-                token = json.loads(bootstrap.stdout)["token"]
-                identity = subprocess.run(prefix + ["--offline", "identity-check"],
-                                          env=env, capture_output=True, text=True, timeout=120)
-                if identity.returncode or json.loads(identity.stdout) != {"feature": "memory-identity-v1", "valid": True}:
-                    raise RuntimeError("fresh database identity check preflight failed")
-
-                if args.image:
                     subprocess.run(["docker", "run", "-d", "--name", name,
                                     "-p", "127.0.0.1::8080", "-v", volume + ":/data",
-                                    "-e", "OC_ENABLE_MODELS=false", args.image],
+                                    "-e", "OC_ENABLE_MODELS=false", "-e", "OC_DEPLOYMENT_ADMIN_KEY", args.image],
+                                   env=env,
                                    check=True, capture_output=True, timeout=120)
                     docker_started = True
                     port = subprocess.check_output(
                         ["docker", "port", name, "8080/tcp"], text=True).strip().rsplit(":", 1)[1]
                 else:
-                    process = subprocess.Popen(prefix + ["serve", "--bind", "127.0.0.1:0"],
+                    process = subprocess.Popen([str(Path(args.binary).resolve()), "serve", "--bind", "127.0.0.1:0"],
                                                env=env, stdout=log, stderr=log, text=True)
                     port = None
                 deadline = time.monotonic() + 120
@@ -79,14 +67,14 @@ def main():
                     raise RuntimeError("host startup timed out")
                 base = "http://127.0.0.1:" + port
 
-                def request(path, body=None, authenticated=True):
+                def request(path, body=None, authenticated=True, method=None):
                     headers = {}
                     if authenticated:
                         headers["Authorization"] = "Bearer " + token
                     if body is not None:
                         headers["Content-Type"] = "application/json"
                         headers["Idempotency-Key"] = uuid.uuid4().hex
-                    req = urllib.request.Request(base + path,
+                    req = urllib.request.Request(base + path, method=method,
                                                  data=None if body is None else json.dumps(body).encode(),
                                                  headers=headers)
                     with opener.open(req, timeout=10) as response:
@@ -107,6 +95,10 @@ def main():
                         raise RuntimeError("unexpected unauthenticated status") from None
                 else:
                     raise RuntimeError("unauthenticated request was accepted")
+                assert request("/admin/deployment/me")["role"] == "deployment_admin"
+                created = request("/admin/deployment/workspaces/" + str(uuid.uuid4()),
+                                  {"name": "smoke"}, method="PUT")
+                token = created["key"]["token"]
                 accepted = request("/v1/memories", {"fact_key": "smoke.policy", "content": "SMOKEPOLICY requires approval"})
                 def published(accepted):
                     deadline = time.monotonic() + 120

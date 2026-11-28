@@ -28,6 +28,39 @@ fn command(dir: &std::path::Path) -> Command {
         .kill_on_drop(true);
     c
 }
+#[test]
+fn cli_exposes_only_serve() {
+    let binary = env!("CARGO_BIN_EXE_origence");
+    let output = std::process::Command::new(binary)
+        .arg("--help")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let help = String::from_utf8(output.stdout).unwrap();
+    let commands: Vec<_> = help
+        .split_once("Commands:\n")
+        .unwrap()
+        .1
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .map(|line| line.split_whitespace().next().unwrap())
+        .collect();
+    assert_eq!(commands, ["serve", "help"]);
+    for args in [
+        ["--offline", "serve"],
+        ["api", "--help"],
+        ["plugin-hook", "--help"],
+        ["search", "example"],
+        ["workspace-create", "example"],
+    ] {
+        let rejected = std::process::Command::new(binary)
+            .args(args)
+            .output()
+            .unwrap();
+        assert_eq!(rejected.status.code(), Some(2));
+    }
+}
+
 async fn stop(child: &mut Child) {
     child.kill().await.unwrap();
     child.wait().await.unwrap();
@@ -144,7 +177,11 @@ async fn start(dir: &std::path::Path, model: &str) -> (Child, String) {
         .env("OC_EXTRACTION_MODEL", "stub")
         .args(["serve", "--bind", "127.0.0.1:0"])
         .stdout(Stdio::piped());
-    let mut child = c.spawn().unwrap();
+    start_host(c).await
+}
+
+async fn start_host(mut command: Command) -> (Child, String) {
+    let mut child = command.spawn().unwrap();
     let mut output = BufReader::new(child.stdout.take().unwrap()).lines();
     let line = tokio::time::timeout(Duration::from_secs(30), output.next_line())
         .await
@@ -171,28 +208,98 @@ async fn start(dir: &std::path::Path, model: &str) -> (Child, String) {
     .unwrap();
     (child, base)
 }
+
+#[tokio::test]
+async fn serve_bootstraps_one_administrator_before_accepting_requests() {
+    let dir = tempfile::tempdir().unwrap();
+    let start = |admin: Option<&str>| {
+        let mut server = command(dir.path());
+        crate::support::command_env(&mut server, dir.path(), None);
+        server
+            .env_remove("OC_DEPLOYMENT_ADMIN_KEY")
+            .args(["serve", "--bind", "127.0.0.1:0"])
+            .stdout(Stdio::piped());
+        if let Some(admin) = admin {
+            server.env("OC_DEPLOYMENT_ADMIN_KEY", admin);
+        }
+        start_host(server)
+    };
+    let (mut child, base) = start(None).await;
+    let path = dir.path().join("deployment-admin.key");
+    let key = std::fs::read_to_string(&path).unwrap();
+    let admin = key.trim_end();
+    assert_eq!(admin.len(), 73);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o077,
+            0
+        );
+    }
+    let http = reqwest::Client::new();
+    let roster = request(
+        &http,
+        &base,
+        admin,
+        reqwest::Method::GET,
+        "/admin/deployment/workspaces",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(roster["items"], json!([]));
+    let workspace = Uuid::new_v4();
+    let created = request(
+        &http,
+        &base,
+        admin,
+        reqwest::Method::PUT,
+        &format!("/admin/deployment/workspaces/{workspace}"),
+        json!({"name":"Default admin fixture"}),
+    )
+    .await;
+    assert_eq!(created["created"], true);
+    stop(&mut child).await;
+
+    let replacement = format!(
+        "oc_admin_{}{}",
+        Uuid::new_v4().simple(),
+        Uuid::new_v4().simple()
+    );
+    let (mut child, base) = start(Some(&replacement)).await;
+    let roster = request(
+        &http,
+        &base,
+        admin,
+        reqwest::Method::GET,
+        "/admin/deployment/workspaces",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(roster["items"][0]["workspace_id"], json!(workspace));
+    assert_eq!(
+        http.get(format!("{base}/admin/deployment/me"))
+            .bearer_auth(replacement)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        401
+    );
+    assert!(std::fs::read_to_string(&path).unwrap() == key);
+    stop(&mut child).await;
+}
+
 fn pdf() -> Vec<u8> {
     super::pdf_fixture::text_pdf(&["Release approval evidence", "Second page provenance"])
 }
 
 #[tokio::test]
-async fn local_host_api_cli_mcp_models_and_recovery() {
+async fn local_host_http_mcp_models_and_recovery() {
     let dir = tempfile::tempdir().unwrap();
-    let out = command(dir.path())
-        .args(["--offline", "workspace-create", "local tests"])
-        .output()
-        .await
-        .unwrap();
-    assert!(out.status.success());
-    let bootstrap: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let bootstrap = crate::support::seed_workspace(dir.path(), "local tests", None).await;
     let token = bootstrap["token"].as_str().unwrap();
-    let other = command(dir.path())
-        .args(["--offline", "workspace-create", "other scope"])
-        .output()
-        .await
-        .unwrap();
-    assert!(other.status.success());
-    let other: Value = serde_json::from_slice(&other.stdout).unwrap();
+    let other = crate::support::seed_workspace(dir.path(), "other scope", None).await;
     let slow = Arc::new(AtomicBool::new(false));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let model = format!("http://{}", listener.local_addr().unwrap());
@@ -252,22 +359,11 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         .status(),
         404
     );
-    let cli = command(dir.path())
-        .env("OC_API_KEY", token)
-        .env("OC_SERVER_URL", &base)
-        .args(["search", "approval"])
-        .output()
-        .await
-        .unwrap();
-    assert!(cli.status.success());
-    let cli: Value = serde_json::from_slice(&cli.stdout).unwrap();
-    assert_eq!(cli["hits"][0]["asset_id"], published["asset_id"]);
-    let blocked = command(dir.path())
-        .args(["--offline", "workspace-create", "blocked"])
-        .output()
-        .await
-        .unwrap();
-    assert!(!blocked.status.success());
+    assert!(
+        SqliteStore::open(dir.path().join("context.db"))
+            .await
+            .is_err()
+    );
     // Extraction publishes under the capture creator's own write authority.
     let capture = post(
         &http,
@@ -1113,39 +1209,6 @@ async fn local_host_api_cli_mcp_models_and_recovery() {
         Err(json!({"http_status":401}))
     );
     stop(&mut host).await;
-    // No silent offline fallback when host is gone.
-    let unavailable = command(dir.path())
-        .env("OC_API_KEY", token)
-        .env("OC_SERVER_URL", &base)
-        .args(["search", "approval"])
-        .output()
-        .await
-        .unwrap();
-    assert!(!unavailable.status.success());
-    let mut offline_command = command(dir.path());
-    crate::support::command_env(&mut offline_command, dir.path(), Some(3));
-    let offline = offline_command
-        .env("OC_ENABLE_MODELS", "true")
-        .env("OC_MODEL_BASE_URL", &model)
-        .env("OC_MODEL_API_KEY", "stub")
-        .env("OC_EMBEDDING_MODEL", "stub")
-        .env("OC_EMBEDDING_DIMENSION", "3")
-        .env("OC_EXTRACTION_MODEL", "stub")
-        .env("OC_API_KEY", token)
-        .args(["--offline", "search", "approval"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await
-        .unwrap();
-    assert!(
-        offline.status.success(),
-        "offline search after host termination: status={:?}, code={:?}, stdout={}, stderr={}",
-        offline.status,
-        offline.status.code(),
-        String::from_utf8_lossy(&offline.stdout),
-        String::from_utf8_lossy(&offline.stderr)
-    );
     mock.abort();
 }
 fn post_route() -> axum::routing::MethodRouter<Arc<AtomicBool>> {
@@ -2150,7 +2213,7 @@ async fn graceful_host_shutdown_stops_worker_and_closes_store() {
 }
 
 #[tokio::test]
-async fn offline_cli_search_crosses_authority_batch_boundaries() {
+async fn host_search_crosses_authority_batch_boundaries_after_reopen() {
     let dir = tempfile::tempdir().unwrap();
     let service = crate::support::open_service(dir.path(), Models::disabled())
         .await
@@ -2255,28 +2318,23 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
     service.engine.shutdown().await.unwrap();
     drop(service);
 
-    // A Rust test thread has a different stack budget. Run the actual binary
-    // after releasing every store handle so Windows exercises its default main
-    // thread stack through startup, SQL batches, native FTS and final authority.
-    let mut offline_command = command(dir.path());
-    crate::support::command_env(&mut offline_command, dir.path(), None);
-    let output = offline_command
-        .env("OC_API_KEY", &reader.token)
-        .args(["--offline", "search", "approval", "--limit", "100"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "offline batch search: status={:?}, code={:?}, stdout={}, stderr={}",
-        output.status,
-        output.status.code(),
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    // Exercise the server process and the real HTTP boundary after reopening
+    // the backing store, including the default main-thread stack on Windows.
+    let mut server = command(dir.path());
+    crate::support::command_env(&mut server, dir.path(), None);
+    server
+        .args(["serve", "--bind", "127.0.0.1:0"])
+        .stdout(Stdio::piped());
+    let (mut child, base) = start_host(server).await;
+    let response = post(
+        &reqwest::Client::new(),
+        &base,
+        &reader.token,
+        "/v1/search",
+        json!({"query":"approval","mode":"keyword","limit":100}),
+    )
+    .await;
+    stop(&mut child).await;
     assert_eq!(response["effective_mode"], "keyword");
     assert_eq!(response["warnings"], json!([]));
     let hits: Vec<SearchHit> = serde_json::from_value(response["hits"].clone()).unwrap();
@@ -2299,13 +2357,7 @@ async fn offline_cli_search_crosses_authority_batch_boundaries() {
 async fn graph_one_hop_direction_disabled_path_and_withdrawal() {
     use origence::graph::{entity_id, relation_id};
     let dir = tempfile::tempdir().unwrap();
-    let out = command(dir.path())
-        .args(["--offline", "workspace-create", "graph-chain"])
-        .output()
-        .await
-        .unwrap();
-    assert!(out.status.success());
-    let bootstrap: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let bootstrap = crate::support::seed_workspace(dir.path(), "graph-chain", None).await;
     let token = bootstrap["token"].as_str().unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let model = format!("http://{}", listener.local_addr().unwrap());

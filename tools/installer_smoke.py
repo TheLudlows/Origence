@@ -109,7 +109,7 @@ def installer(env, commands, forbidden, expected=0, *, entry=None, cwd=REPO):
             for item in [json.loads(line)]}
 
 
-def check_hook(binary, project, env, credentials, archive_project):
+def check_hook(project, env, credentials, archive_project):
     ui = credentials["ui"]
     profile, session = request(ui + "/api/console/session", headers={"Origin": ui}, payload={
         "workspace_key": credentials["token"],
@@ -127,7 +127,8 @@ def check_hook(binary, project, env, credentials, archive_project):
     question, answer = "Installer synthetic question", "Installer synthetic answer"
     for payload in (dict(event, hook_event_name="UserPromptSubmit", prompt=question),
                     dict(event, hook_event_name="Stop", last_assistant_message=answer)):
-        child = subprocess.run([str(binary), "plugin-hook", "--client", "claude-code"], cwd=project,
+        hook = REPO / "plugins" / "origence" / "hooks" / "entry.mjs"
+        child = subprocess.run(["node", "--disable-warning=ExperimentalWarning", str(hook), "claude-code"], cwd=project,
                                env=hook_env, input=json.dumps(payload), text=True, capture_output=True,
                                timeout=20, check=True)
         sanitized(child.stdout + child.stderr, [credentials["token"], credentials["deployment_admin_key"]])
@@ -195,7 +196,7 @@ def smoke(binary, claude, codex, root, browser):
         endpoint = f"http://127.0.0.1:{port()}"
     deploy_args = ["--endpoint", endpoint, "--ui-port", str(ui_port), "--data-dir", str(data),
                    "--origence", str(binary)]
-    setup_args = ["--agent", "both", "--origence", str(binary), "--claude", str(claude), "--codex", str(codex)]
+    setup_args = ["--agent", "both", "--claude", str(claude), "--codex", str(codex)]
     deploy_cmd = [str(DEPLOY)]
     setup_cmd = [str(SETUP)]
     project = root / "Claude synthetic project"
@@ -207,8 +208,7 @@ def smoke(binary, claude, codex, root, browser):
     try:
         alone = installer(env, ["uninstall"], [], entry=setup_cmd, cwd=root)
         require(alone["uninstall"]["status"] == "skipped", "Empty setup must be a no-op")
-        absent = installer(env, ["install", *deploy_args, "--origence", str(root / "missing" / "origence"),
-                                 "--init", "Missing"], [], expected=1, entry=deploy_cmd, cwd=root)
+        absent = installer(env, ["install", *deploy_args, "--origence", str(root / "missing" / "origence")], [], expected=1, entry=deploy_cmd, cwd=root)
         require("requested Origence executable could not be found" in absent["installation"]["detail"]
                 and not data.exists(), "Missing Origence executable must be diagnosed before creating a workspace")
         invalid = "invalid-installer-fixture-key"
@@ -217,15 +217,28 @@ def smoke(binary, claude, codex, root, browser):
                                 expected=1, entry=setup_cmd, cwd=root)
         require("could not reach" in unreachable["installation"]["detail"] and not data.exists() and not state.exists(),
                 "Agent setup against an unreachable API must not deploy a service or save state")
-        first = installer(env, ["install", *deploy_args, "--init", "Installer synthetic", "--verify-write",
-                                "--credentials-file", str(output)], forbidden, entry=deploy_cmd, cwd=root)
+        initial = installer(env, ["install", *deploy_args, "--credentials-file", str(output)],
+                            forbidden, entry=deploy_cmd, cwd=root)
         credentials = json.loads(output.read_text(encoding="utf-8"))
-        forbidden = [credentials["token"], credentials["deployment_admin_key"], credentials["password"]]
-        sanitized(first, forbidden)
-        require(credentials["login_mode"] == "deployment" and credentials["role"] == "workspace"
-                and credentials["username"] == "admin" and first["console-session"]["status"] == "success"
-                and first["deployment-admin-session"]["status"] == "success",
-                "Fresh deployment must provision the workspace Key and deployment administrator account")
+        forbidden = [credentials["deployment_admin_key"], credentials["password"]]
+        sanitized(initial, forbidden)
+        require(credentials["login_mode"] == "deployment" and credentials["role"] == "deployment_admin"
+                and "token" not in credentials and credentials["username"] == "admin"
+                and initial["deployment-admin-session"]["status"] == "success",
+                "Fresh startup must register an administrator without provisioning a workspace")
+        admin = {"Authorization": "Bearer " + credentials["deployment_admin_key"]}
+        created, _ = request(endpoint + "/admin/deployment/workspaces/" + str(uuid.uuid4()),
+                             payload={"name": "Installer synthetic"}, headers=admin, method="PUT")
+        credentials.update(token=created["key"]["token"], workspace_id=created["workspace_id"])
+        forbidden.append(credentials["token"])
+        initial_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=credentials["token"])
+        first = installer(initial_env, ["install", "--from-env", "--force", "--verify-write"],
+                          forbidden, entry=deploy_cmd, cwd=root)
+        require(first["whoami"]["detail"]["role"] == "workspace"
+                and first["write-check"]["status"] == "success", "Existing workspace must support a write check")
+        config = json.loads(state.read_text(encoding="utf-8"))["deploy"]["config"]
+        credentials["password"] = config["password"]
+        forbidden.append(config["password"])
         require((state.parent / "console-accounts.db").is_file()
                 and not Path(env["ORIGENCE_UI_ACCOUNTS_DB"]).exists(),
                 "Fresh deployment must use its managed console account database")
@@ -247,7 +260,7 @@ def smoke(binary, claude, codex, root, browser):
         require("401" in failure["installation"]["detail"], "Rejected key must yield an actionable 401")
 
         # The console is already listening. Agent setup only needs the API.
-        claude_only = installer(env_key, ["install", "--from-env", "--agent", "claude", "--origence", str(binary),
+        claude_only = installer(env_key, ["install", "--from-env", "--agent", "claude",
                                          "--claude", str(claude)], forbidden, entry=setup_cmd, cwd=subdir)
         require("claude-code" in claude_only and "codex" not in claude_only,
                 "Selecting Claude must leave Codex untouched")
@@ -285,7 +298,7 @@ def smoke(binary, claude, codex, root, browser):
         if not WINDOWS:
             check = ('test "$OC_API_KEY" = "$EXPECTED" && test "$OC_WORKSPACE_ID" = "$WORKSPACE"'
                      ' && test "$OC_TURN_SYNC_PROJECT" = "$PROJECT"'
-                     ' && { origence --version && origence-setup --help && origence-deploy --help; } >/dev/null'
+                     ' && { node --version && origence-setup --help && origence-deploy --help; } >/dev/null'
                      ' && printf "%s" "$OC_TURN_SYNC_PROJECT"')
             shell_env = dict(env, EXPECTED=credentials["token"], WORKSPACE=credentials["workspace_id"],
                              PROJECT=str(project.resolve()))
@@ -299,15 +312,14 @@ def smoke(binary, claude, codex, root, browser):
             inherited = actual["OC_TURN_SYNC_PROJECT"]
             require(actual["OC_API_KEY"] == credentials["token"] and actual["OC_SERVER_URL"] == endpoint and
                     actual["OC_WORKSPACE_ID"] == credentials["workspace_id"], "New Windows sessions must receive settings")
-            origence = shutil.which("origence.exe", path=actual["PATH"])
-            require(origence is not None and Path(origence).resolve() == binary.resolve(), "Windows PATH is missing Origence")
+            require(shutil.which("node.exe", path=actual["PATH"]) is not None, "Windows PATH is missing Node.js")
             for launch in (SETUP, DEPLOY):
                 found = shutil.which(launch.name, path=actual["PATH"])
                 require(found is not None and Path(found).resolve() == launch, "Windows PATH is missing " + launch.name)
         scoped = dict(env_key, OC_WORKSPACE_ID=credentials["workspace_id"])
         require(Path(inherited).resolve() == project.resolve(), "New sessions must inherit the setup project's Git root")
         check_codex(codex, root / "Codex synthetic project", scoped, credentials, forbidden)
-        hook_run = check_hook(binary, subdir, env, credentials, inherited)
+        hook_run = check_hook(subdir, env, credentials, inherited)
         if browser:
             check_browser(env, credentials, hook_run, forbidden)
 
@@ -343,15 +355,18 @@ def smoke(binary, claude, codex, root, browser):
         repeat = installer(env, ["uninstall"], forbidden, entry=setup_cmd, cwd=root)
         require(repeat["uninstall"]["status"] == "skipped", "Rerunning Agent uninstall must skip")
 
-        (data / "preserve-me").write_text("backup fixture", encoding="utf-8")
-        replacement = installer(env, ["install", *deploy_args, "--force", "--init", "Other synthetic"],
+        (data / "preserve-me").write_text("preservation fixture", encoding="utf-8")
+        other, _ = request(endpoint + "/admin/deployment/workspaces/" + str(uuid.uuid4()),
+                           payload={"name": "Other synthetic"}, headers=admin, method="PUT")
+        forbidden.append(other["key"]["token"])
+        replacement = installer(dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=other["key"]["token"]),
+                                ["install", "--from-env", "--force"],
                                 forbidden, entry=deploy_cmd, cwd=root)
-        backup = Path(replacement["backup"]["detail"])
-        require((backup / "preserve-me").read_text(encoding="utf-8") == "backup fixture" and
-                replacement["whoami"]["detail"]["workspace_id"] != credentials["workspace_id"],
-                "Force plus init must preserve the original data and bind the new workspace")
+        require((data / "preserve-me").read_text(encoding="utf-8") == "preservation fixture" and
+                replacement["whoami"]["detail"]["workspace_id"] == other["workspace_id"],
+                "Rebinding the installer must preserve the original data directory")
         config = json.loads(state.read_text(encoding="utf-8"))["deploy"]["config"]
-        forbidden.extend([config["token"], config["deploymentKey"], config["password"]])
+        forbidden.append(config["password"])
         sanitized(replacement, forbidden)
         new_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=config["token"])
         if WINDOWS:
@@ -364,16 +379,14 @@ def smoke(binary, claude, codex, root, browser):
                 "Setup must allow private turn archiving to be paused")
         session, _ = request(endpoint + "/v1/session", headers={"Authorization": "Bearer " + config["token"]})
         agent = json.loads(state.read_text(encoding="utf-8"))["agent"]
+        replacement_key, _ = request(endpoint + "/admin/deployment/workspaces/" + config["workspace"] + "/keys/rotate",
+                                     headers=admin, method="POST")
         installer(env, ["uninstall"], forbidden, entry=deploy_cmd, cwd=root)
         remaining = json.loads(state.read_text(encoding="utf-8"))
         require("deploy" not in remaining and remaining["agent"] == agent,
                 "Deployment uninstall must leave Agent settings and ownership alone")
-        require((data / "context.db").is_file() and (backup / "context.db").is_file(),
-                "Deployment uninstall must preserve both live and backed-up data")
-        rotated = subprocess.run([str(binary), "--data-dir", str(data), "--offline",
-                                  "workspace-key-rotate", config["workspace"]],
-                                 cwd=root, env=env, capture_output=True, timeout=60, check=True)
-        replacement_key = json.loads(rotated.stdout)
+        require((data / "context.db").is_file() and (data / "preserve-me").is_file(),
+                "Deployment uninstall must preserve backend data")
         forbidden.append(replacement_key["token"])
         require(replacement_key["key_id"] != config["key"], "Key rotation must issue a new credential ID")
         rotated_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=replacement_key["token"])
@@ -399,7 +412,7 @@ def smoke(binary, claude, codex, root, browser):
             require(registry_values()["OC_API_KEY"] == adopted_key,
                     "Agent uninstall must preserve a preconfigured user Key")
         require(not state.exists(), "Both uninstalls left an active journal")
-        print("PASS split deployment and Agent setup, native Claude/Codex MCP, Hook Run, private turn archive, backups, and isolated rollback")
+        print("PASS split deployment and Agent setup, native Claude/Codex MCP, Hook Run, private turn archive, existing data preservation, and isolated rollback")
     finally:
         try:
             if state.exists():

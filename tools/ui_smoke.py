@@ -11,6 +11,7 @@ import urllib.error
 import urllib.request
 import uuid
 
+from native_fixture import workspace as seed_workspace
 from mcp_smoke import Host, isolated_env, require
 
 
@@ -22,9 +23,7 @@ def main():
     binary, entry = str(Path(args.binary).resolve()), str(Path(args.ui_entry).resolve())
     with tempfile.TemporaryDirectory(prefix="origence-ui-smoke-") as directory:
         env = isolated_env(directory)
-        bootstrap = subprocess.run([binary, "--offline", "workspace-create", "UI smoke"], env=env, capture_output=True, check=True, timeout=60)
-        workspace = json.loads(bootstrap.stdout)
-        token = workspace["token"]
+        token = seed_workspace(env, "UI smoke")["token"]
         with Host(binary, env, token, [token]) as host, tempfile.TemporaryFile() as log:
             with socket.socket() as sock:
                 sock.bind(("127.0.0.1", 0))

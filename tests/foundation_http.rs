@@ -1,8 +1,7 @@
-//! Loopback HTTP regression for private Run → selected review → native Skill export.
+//! Loopback HTTP regression for private Run → selected review → authorized Skill package.
 use crate::support::open_service;
 use origence::{
     client::HostClient,
-    client_skill::{SkillClient, export_skill},
     models::Models,
     storage::{RelationalStore, Scope},
 };
@@ -176,37 +175,14 @@ async fn private_run_to_reviewed_skill_never_discloses_raw_evidence() {
     assert_eq!(published["manifest"]["skill_id"], skill.to_string());
     assert!(!published.to_string().contains("Redacted selected evidence"));
 
-    let project = tempfile::tempdir().unwrap();
-    let wrong = Scope {
-        workspace_id: Uuid::new_v4(),
-        ..scope
-    };
-    assert!(matches!(
-        export_skill(
-            &reader_client,
-            SkillClient::Codex,
-            project.path(),
-            wrong,
-            skill,
-            1
-        )
-        .await,
-        Err(origence::error::AppError::Forbidden)
-    ));
-    let installed = export_skill(
-        &reader_client,
-        SkillClient::Codex,
-        project.path(),
-        scope,
-        skill,
-        1,
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        std::fs::read_to_string(installed.join("SKILL.md")).unwrap(),
-        published["files"]["SKILL.md"].as_str().unwrap()
-    );
+    let package_path = format!("/v1/skills/{skill}/versions/1/package");
+    let package = reader_client
+        .call(Method::GET, &package_path, None, None)
+        .await
+        .unwrap();
+    assert_eq!(package, published);
+    let package: origence::skill::SkillPackage = serde_json::from_value(package).unwrap();
+    package.validate().unwrap();
     let response = reqwest::Client::new()
         .get(format!("{base}/v1/skills/{skill}/versions/1/package"))
         .send()
