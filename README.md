@@ -65,7 +65,7 @@ Library callers can use parsing, identity and value contracts, models, Blob stor
 cargo test --no-default-features
 ```
 
-Enable `sqlite` for the standalone authority adapter, `local-storage` for the remote-only host, or `embedded-anyseek` for the default native build with local SDK support. Empty read sets skip metadata queries. Host transactions validate required permissions at entry and again at commit.
+Enable `sqlite` for the standalone authority adapter. Empty read sets skip metadata queries. Host transactions validate required permissions at entry and again at commit.
 
 ## Documentation
 

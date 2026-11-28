@@ -47,7 +47,7 @@ pub(super) fn checked_identity(
 }
 
 impl SqliteTx {
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn identity_for_asset(
         &mut self,
         asset: Uuid,
@@ -216,7 +216,7 @@ impl SqliteTx {
     }
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 impl SqliteTx {
     /// Raw asset identity columns, including unidentified assets. No current or
     /// semantic-status guard: consumers decode after their route filtering.

@@ -643,7 +643,7 @@ def protocols(base, token, forbidden):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", required=True, help="built Origence executable (with local-storage)")
+    parser.add_argument("--binary", required=True, help="built Origence executable (with host)")
     parser.add_argument("--local", action="store_true", help="use the embedded AnySeek Catalog")
     args = parser.parse_args()
     binary = str(Path(args.binary).resolve())

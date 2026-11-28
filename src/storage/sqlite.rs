@@ -29,20 +29,20 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 mod app;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod archive_restore;
 mod catalog;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod consolidation;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod context;
-#[cfg(all(test, feature = "local-storage"))]
+#[cfg(all(test, feature = "host"))]
 mod context_route_tests;
 mod deployment;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub use deployment::DeploymentKeyOperation;
 mod domain;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod full_text;
 pub(crate) mod global_knowledge;
 mod identity;
@@ -65,7 +65,7 @@ mod read_model;
 #[cfg(test)]
 mod read_model_tests;
 mod relational;
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 pub(crate) mod retrieval;
 mod run_metering;
 mod run_verification;
@@ -98,7 +98,7 @@ use locking::LockGuard;
 /// The local relational store backed by a single native SQLite database file.
 pub struct SqliteStore {
     pool: Pool,
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) archive_dependencies: tokio::sync::Mutex<()>,
     path: PathBuf,
     /// In-process lock holder bound to the database path (A2.5). Dropping it

@@ -1,4 +1,4 @@
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 
 use axum::{Json, Router, extract::State, routing::post};
 use origence::storage::sqlite_db as db;

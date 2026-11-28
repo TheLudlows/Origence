@@ -41,6 +41,8 @@ SQLite 仍保存不可变经验候选，以及 Run 精确回放所需的普通�
 
 ## Origence 本地与云上启动
 
+默认构建包含完整宿主和嵌入式 SDK。云上镜像关闭默认特性并启用 `host`，单独使用 SQLite 权威适配器仍可选 `sqlite`。
+
 `origence serve --local` 通过 Rust SDK 在同一进程打开 AnySeek 本地 Catalog，目录为 `OC_DATA_DIR/anyseek`。启动恢复、已发布集合核验及正常关闭由同一宿主管理。Windows 开发脚本调用此入口，再按需启动 Node UI。云上镜像使用 `origence serve` 连接独立部署的 AnySeek，地址与凭据由部署环境提供。[运维说明](OPERATIONS.md#anyseek-全文与向量)
 
 `origence` 公开 `serve`（兼容别名 `api`）。首次启动登记部署管理员。管理员通过控制台或 HTTP 创建工作空间。`origence-deploy` 管理本地 API 和控制台，`origence-setup` 使用已有工作区 Key 接入 Agent。两者独立卸载并保留数据。[安装说明](INSTALLER.md)

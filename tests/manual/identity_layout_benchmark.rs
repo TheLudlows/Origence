@@ -1,5 +1,5 @@
 //! Historical layout microbenchmark, never a production old-schema opening path.
-//! Run: cargo test --locked --release --no-default-features --features manual-diagnostics --test identity-layout identity_layout_before_after -- --ignored --exact --nocapture
+//! Run: cargo test --locked --release --no-default-features --features sqlite --test identity-layout identity_layout_before_after -- --ignored --exact --nocapture
 //! Single writer, 100 operations/transaction, native defaults. All rows are created;
 //! reuse/lookup sample at most 1,000 evenly spaced keys at each dataset size.
 //! Counts cover explicit workload SELECT/INSERT statements only, not BEGIN/COMMIT,
@@ -462,7 +462,7 @@ async fn creation_plans(
 }
 
 /// Run separately from the original benchmark, in release mode, with --exact:
-/// cargo test --locked --release --no-default-features --test local identity_layout_benchmark::identity_layout_creation_diagnostics -- --ignored --exact --nocapture
+/// cargo test --locked --release --no-default-features --features sqlite --test identity-layout identity_layout_creation_diagnostics -- --ignored --exact --nocapture
 /// Creation only; unchanged 100-operation transactions. Three cyclic orders at
 /// 1k, forward/reverse at 10k. The 10k order cannot fully balance three variants.
 /// Stage clocks include query construction/binding/await, not input hashing or
@@ -483,7 +483,7 @@ async fn identity_layout_creation_diagnostics() {
 /// forced variant adds only INDEXED BY to that predicate. No deleted filter.
 /// Unsupported hints fail explicitly during untimed empty-database preflight;
 /// they never silently fall back. Plans are emitted before first timed samples.
-/// Run with --release --test local identity_layout_benchmark::identity_layout_query_diagnostics -- --ignored --exact --nocapture.
+/// Use the command above with identity_layout_query_diagnostics.
 #[tokio::test]
 #[ignore = "manual query-plan diagnosis; no production query changes"]
 async fn identity_layout_query_diagnostics() {

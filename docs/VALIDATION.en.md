@@ -30,6 +30,26 @@ Based on main `340aa50`. Linux, Rust 1.98.0, Node 24, with synthetic data in tem
 - `cargo test --offline --locked --test local -j 3` passed 12, 6, and 5 tests filtered by `local_app::`, `client_hooks::`, and `workspace_access::`. They cover the binary command surface, the compatibility alias, preservation of the existing administrator, online workspace provisioning, and the actual hook.
 - `python3 tools/anyseek_smoke.py --embedded --binary <origence>`, `python3 tools/mcp_smoke.py --local --binary <origence>`, `python3 tools/private_archive_smoke.py --binary <origence>`, and `npm test --prefix ui` passed. The local installer and console accepted plain install, rejected `--init`, and preserved data across reinstall and uninstall.
 - Windows, Docker, live models, and native Claude Code / Codex sessions were outside this local verification.
+## 2026-11-28 · Host build feature simplification
+
+Based on main `496960f`, using Linux and Rust 1.98.0. `cargo clippy --locked --offline
+--all-targets -- -D warnings` passed for the default, `host`-only, and `sqlite`-only builds.
+The latter two used `--no-default-features --features host` or
+`--no-default-features --features sqlite`. Format and diff checks passed. `cargo tree`
+confirmed that the default links the AnySeek SDK and SQLite, `host` alone links SQLite,
+and the core build with default features disabled has no SQLite dependency.
+
+- `cargo test --locked --offline --no-default-features --features host --test anyseek`
+  passed 7 tests and ignored 8. The remote host rejected missing remote configuration and `--local`.
+- `cargo test --locked --offline --test anyseek` passed 6 tests and ignored 8.
+  `python3 tools/anyseek_smoke.py --embedded --binary <origence>` passed and covered
+  embedded AnySeek publication, diagnostics, replay, restart, and refusal to recreate a lost Catalog.
+- `cargo test --locked --offline --no-default-features --features sqlite --test identity-layout`
+  ignored all 3 diagnostics by default. Appending `identity_layout_before_after -- --ignored --exact`
+  ran the selected diagnostic successfully.
+
+A standalone AnySeek server, the Docker image, and native Windows builds were outside this local run.
+
 ## 2026-11-28 · Global knowledge retrieval review
 
 Based on `14278f4`, using Linux and Rust 1.98.0. The HTTP protocol fixture verified

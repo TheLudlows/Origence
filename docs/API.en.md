@@ -67,7 +67,7 @@ See [OPERATIONS](OPERATIONS.en.md#anyseek-full-text-and-vector-retrieval) for de
 
 - Core without a metadata database. `default-features = false` provides types, parsing, models, Blob, and the AnySeek interface.
 - SQLite authority adapter. `default-features = false, features = ["sqlite"]`.
-- The full HTTP/MCP host defaults to `embedded-anyseek`, including `local-storage` and `sqlite`. For the remote cloud host, disable default features and enable `local-storage`.
+- The full HTTP/MCP host defaults to `embedded-anyseek`, including `host` and `sqlite`. For the remote cloud host, disable default features and enable `host`.
 
 Use `cargo test --no-default-features` to test the standalone core. The authority-only check now explicitly uses `cargo test --no-default-features --features sqlite` and still runs the full authorization, queue, and recovery regressions.
 

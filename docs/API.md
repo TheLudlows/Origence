@@ -107,7 +107,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 - 无元数据库核心：`default-features = false`，提供类型、解析、模型、Blob 与 AnySeek 接口。
 - SQLite 权威适配器：`default-features = false, features = ["sqlite"]`。
-- 完整 HTTP/MCP 宿主默认启用 `embedded-anyseek`，包含 `local-storage` 和 `sqlite`。云上远端宿主关闭默认特性并启用 `local-storage`。
+- 完整 HTTP/MCP 宿主默认启用 `embedded-anyseek`，包含 `host` 和 `sqlite`。云上远端宿主关闭默认特性并启用 `host`。
 
 核心独立检查用 `cargo test --no-default-features`；原 authority-only 检查现在显式使用
 `cargo test --no-default-features --features sqlite`，仍运行其完整授权/队列/恢复回归。

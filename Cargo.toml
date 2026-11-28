@@ -41,11 +41,9 @@ windows-sys = { version = "0.61.2", optional = true, features = ["Win32_Foundati
 
 [features]
 default = ["embedded-anyseek"]
-embedded-anyseek = ["local-storage", "dep:anyseek"]
-local-storage = ["sqlite", "dep:chrono", "dep:regex", "dep:rmcp", "dep:windows-sys"]
+embedded-anyseek = ["host", "dep:anyseek"]
+host = ["sqlite", "dep:chrono", "dep:regex", "dep:rmcp", "dep:windows-sys"]
 sqlite = ["dep:rusqlite", "dep:fs2"]
-# Historical fixture diagnostics are opt-in and are not production acceptance.
-manual-diagnostics = ["sqlite"]
 
 [profile.release]
 lto = "thin"
@@ -67,28 +65,28 @@ path = "tests/anyseek.rs"
 [[test]]
 name = "identity-layout"
 path = "tests/manual/identity_layout_benchmark.rs"
-required-features = ["manual-diagnostics"]
+required-features = ["sqlite"]
 
 [[bin]]
 name = "origence"
 path = "src/main.rs"
-required-features = ["local-storage"]
+required-features = ["host"]
 
 [[bin]]
 name = "origence-skill"
 path = "src/bin/origence-skill.rs"
-required-features = ["local-storage"]
+required-features = ["host"]
 
 [[test]]
 name = "skill-workflow"
 path = "tests/skill_workflow.rs"
-required-features = ["local-storage"]
+required-features = ["host"]
 
 [[test]]
 name = "memory-consolidation"
 path = "tests/memory_consolidation.rs"
-required-features = ["local-storage"]
+required-features = ["host"]
 
 [[example]]
 name = "native_fixture"
-required-features = ["local-storage"]
+required-features = ["host"]

@@ -399,7 +399,7 @@ fn compact_run_replay(bundle: &crate::evidence::EvidenceBundle) -> crate::eviden
 
 impl SqliteTx {
     /// Revalidate private ownership and all original sources before replay.
-    #[cfg_attr(not(feature = "local-storage"), allow(dead_code))]
+    #[cfg_attr(not(feature = "host"), allow(dead_code))]
     pub(crate) async fn replay_run_context_prepared(
         &mut self,
         run: Uuid,
@@ -512,7 +512,7 @@ impl SqliteTx {
     }
     /// Only service-produced bundles may enter this path; public client event DTOs
     /// cannot deserialize a prepared event or choose its server attribution.
-    #[cfg_attr(not(feature = "local-storage"), allow(dead_code))]
+    #[cfg_attr(not(feature = "host"), allow(dead_code))]
     pub(crate) async fn record_run_context_prepared(
         &mut self,
         run: Uuid,
@@ -614,7 +614,7 @@ impl SqliteTx {
 
 impl SqliteTx {
     /// Record a failed server preparation attempt without any raw query or error body.
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn record_run_context_failed(
         &mut self,
         run: Uuid,
@@ -812,7 +812,7 @@ mod tests {
                 .await
                 .unwrap()
         );
-        #[cfg(feature = "local-storage")]
+        #[cfg(feature = "host")]
         assert_eq!(
             Some(prepared.clone()),
             t.record_run_context_failed(

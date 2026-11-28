@@ -126,7 +126,7 @@ impl RelationalStore for SqliteStore {
 }
 
 impl SqliteStore {
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     pub(crate) async fn list_managed_workspaces(
         &self,
         auth: AuthorizedScope,
@@ -264,7 +264,7 @@ impl SqliteStore {
 }
 
 impl SqliteTx {
-    #[cfg(feature = "local-storage")]
+    #[cfg(feature = "host")]
     async fn managed_workspace_key(&mut self) -> StorageResult<(Uuid, Uuid, String, bool, bool)> {
         sqlite_db::query_as(
             "SELECT logical_key_id,workspace_id,role,default_access,allow_owned_workspaces=1

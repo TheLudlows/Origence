@@ -1,4 +1,4 @@
-#![cfg(feature = "local-storage")]
+#![cfg(feature = "host")]
 use super::semantic_memory::{assert_evidence_budget, assert_evidence_matrix};
 use origence::{
     error::AppError,

@@ -98,7 +98,7 @@ export OC_ANYSEEK_URL=https://anyseek.example.internal
 docker compose up --build -d host
 ```
 
-云上裸机可用 `cargo build --release --locked --no-default-features --features local-storage --bin origence`
+云上裸机可用 `cargo build --release --locked --no-default-features --features host --bin origence`
 构建远端模式的二进制。独立服务的 CI 兼容版本为 AnySeek `6a46fc791c9c425e0f94fea3d04be4c1fb84dc3a`。
 
 每个数据请求从服务端已鉴权

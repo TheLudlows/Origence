@@ -615,7 +615,7 @@ async fn incompatible_owner_constraints_are_rejected_without_repair() {
     pool.close().await;
 }
 
-#[cfg(feature = "local-storage")]
+#[cfg(feature = "host")]
 mod retry_tests {
     use super::*;
     use origence::{error::AppError, models::Models, types::KnowledgeInput};
