@@ -4,6 +4,16 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Remove the legacy key list and reviewer appointments
+
+Verified implementation `1282215c4151bafaafd4a215e1dc556ee8724750` against isolated fresh stores.
+Administrators inspect the current workspace key. Administrator-only Skill review was verified with
+candidate revision, approval digest, source withdrawal, and credential rotation checks.
+Linux passed 468 Rust tests and 33 UI tests. Formatting and strict all-target Clippy passed with all features
+and with only `sqlite`. Chromium covered key management, Skill drafting, review and publication.
+UI, HTTP, and MCP smoke checks against the CI-pinned standalone AnySeek `6a46fc7` covered key rotation,
+workspace isolation, and reopen. The fixes to the Windows-only import and plugin fixture are pending native CI.
+
 ## 2026-11-28 · Skill review for single-key workspaces
 
 Verified implementation `9e32c9e67996501f6aca9b71c26d205d48669fd4` on main base
