@@ -336,12 +336,9 @@ pub(super) async fn process(
             "learning:{}:{}:{}:{}",
             claim.scope.tenant_id, claim.scope.workspace_id, improve_id, decision.candidate
         ));
-        let (asset, source, child) = Service::stage_learning_ingest(
-            &mut tx,
-            candidate,
-            payload.embedding_profile().map(str::to_owned),
-        )
-        .await?;
+        let (asset, source, child) =
+            Service::stage_learning_ingest(&mut tx, payload.embedding_profile().map(str::to_owned))
+                .await?;
         tx.create_learning(
             *session_id,
             *improve_id,

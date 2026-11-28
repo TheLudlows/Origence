@@ -256,14 +256,6 @@ pub trait DomainTx {
     ) -> StorageResult<()>;
 
     /// Register summary recall terms. Text and model provenance live in AnySeek.
-    async fn insert_summary(
-        &mut self,
-        summary: Uuid,
-        chunk: Uuid,
-        search_terms: &str,
-    ) -> StorageResult<()>;
-
-    /// Advance an asset's current version (and optionally its title).
     async fn update_asset_version(
         &mut self,
         asset: Uuid,

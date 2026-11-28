@@ -209,6 +209,10 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
           basis_summary: "synthetic missing output", basis_sequences: [1, 2], reported_skill_version: null },
         recorder_principal_id: ids.run, recorded_at_ms: 2000,
         withdrawal: { reason: "superseded evidence", recorded_at_ms: 3000 },
+      }, {
+        assessment: { verification_id: ids.run, through_sequence: 2, prefix_digest: "d".repeat(64),
+          external_ref: "review:case-17" },
+        recorder_principal_id: ids.run, recorded_at_ms: 2000, withdrawal: null,
       }], next_after: null });
     if (path.pathname === `/api/v1/runs/${ids.coverageRun}/verifications`)
       return response({ items: [], next_after: null });
@@ -804,6 +808,8 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     );
     await wait(() => document.body.textContent.includes("外部结论：失败"));
     assert.ok(document.body.textContent.includes("已撤销的外部核验"));
+    assert.ok(document.body.textContent.includes("关联的外部核验"));
+    assert.ok(document.body.textContent.includes("review:case-17"));
     assert.ok(document.body.textContent.includes("实际使用的 Skill 版本：未知"));
     assert.ok(document.body.textContent.includes("平台未核验其结论"));
     assert.ok(document.body.textContent.includes("<img src=x> external tester"));
@@ -837,6 +843,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     click("刷新核验记录");
     await wait(() => document.body.textContent.includes("source unavailable"));
     assert.ok(!document.body.textContent.includes("synthetic missing output"));
+    assert.ok(!document.body.textContent.includes("review:case-17"));
     assert.ok(!document.body.textContent.includes("<img src=x> external tester"));
     verificationDenied = false;
     click("刷新核验记录");

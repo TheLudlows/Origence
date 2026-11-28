@@ -459,7 +459,6 @@ async fn sqlite_file_interoperability_and_derived_version_hash_survive_reopen() 
     for (table, column) in [
         ("oc_versions", "content"),
         ("oc_chunks", "content"),
-        ("oc_summaries", "text"),
         ("oc_artifact_ledger", "idempotency_key"),
     ] {
         let fields = raw

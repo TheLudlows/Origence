@@ -69,7 +69,7 @@ Host 和 origin 内。后端监听地址只向受信反向代理开放。原生�
 
 ## AnySeek 全文与向量
 
-全文、向量和一跳图候选只走 AnySeek，SQLite 仍决定版本、授权、来源和可见性。已发布正文与摘要文本由同一 AnySeek collection 持久保存。Claude Code/Codex
+全文、摘要、向量和一跳图候选只走 AnySeek，SQLite 仍决定版本、授权、来源和可见性。已发布正文与摘要文本由同一 AnySeek collection 持久保存。Claude Code/Codex
 只需要 Origence key，见[客户端接入](CLIENTS.md)。
 
 ### Origence 本地模式

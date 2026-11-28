@@ -19,7 +19,7 @@ CREATE TABLE oc_skill_reviews (
 CREATE TABLE oc_skill_packages (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, skill_id BLOB NOT NULL,
     version INTEGER NOT NULL CHECK(version > 0), review_id BLOB NOT NULL,
-    owner_key_id BLOB NOT NULL, sources TEXT NOT NULL, package TEXT NOT NULL,
+    owner_key_id BLOB NOT NULL, sources TEXT NOT NULL, package_digest TEXT NOT NULL,
     withdrawn INTEGER NOT NULL DEFAULT 0 CHECK(withdrawn IN (0,1)), created_at INTEGER NOT NULL,
     PRIMARY KEY(tenant_id,workspace_id,skill_id,version),
     UNIQUE(tenant_id,workspace_id,review_id)

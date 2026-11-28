@@ -33,7 +33,7 @@ Trace 以私有 Run 存储。Run 入口从认证取得逻辑 key，按当前权�
 服务端回执证明已准备精确上下文，不证明客户端收到或模型使用。客户端的工具、加载、
 结果、反馈和工件引用只是上报；未上报即未知。任一来源失效时引用复核停发。
 链路读取包含 Run 已记录的正文。私有归档原文、内部重放快照、固定前缀、原始 PDF 核验和外部核验记录继续使用各自的授权。
-外部核验记录由 Run 所有者针对精确前缀通过 HTTP 提交，保留转录来源与核验身份的声明状态。
+Run 所有者可针对精确前缀通过 HTTP 登记外部记录号，或转录核验结果。服务记录提交方式和核验身份的声明状态。
 详情见 [Run 契约](contracts/runs.zh-CN.md)和[外部核验契约](contracts/run-verification.zh-CN.md)。
 
 | Skill 接口 | 输入与结果 |
@@ -79,8 +79,8 @@ EvidenceBundle 的 `retrieval` 可选带 `context_query_embedding`，仅记录�
 
 `POST /v1/runs/{id}/context` 将成功诊断与精确 bundle 摘要一起写入私有 Run；
 通过认证、归属和输入校验后发生的准备失败记录 `context_preparation_failed`，并标为
-server_observed。首次成功时另存私有上下文快照；相同请求重放先检查事件和请求摘要，
-复核当前权限、原始引用及私有会话有效性后返回原 bundle/回执。重放无需模型或重新检索。
+server_observed。首次成功时另存私有证据快照；相同请求重放先检查事件和请求摘要，
+复核当前权限、原始引用及私有会话有效性，从证据项重建拼接文本后返回原 bundle/回执。重放无需模型或重新检索。
 引用私有轮次时按 ID 从 AnySeek 读取并校验正文和 bundle 摘要；后端不可用时保留原回执供重试。
 快照不在分页 Run trace 中重复返回。
 请求摘要改变返回冲突；来源撤回或权限失效仍阻断重放。
@@ -326,7 +326,7 @@ cleanup 的 `completed + outcome=ok` 表示本轮派生数据清理完成；原�
 
 resolve 返回 `tokenizer=utf8-bytes-upper-bound-v1`、`count_is_estimate=true`；count 为 rendered_context 的 UTF-8 字节数。预算 0–32000，超出预算的整块被跳过，不生成没有正文的引用。返回文本是外部证据，不能当成系统指令。
 
-原文关键词在 AnySeek 中按词项编码执行 AND 匹配（查询词项全部出现），限定当前 scope、发布代和完整来源版本。Summary 保留同 chunk 跨摘要行聚合后的 AND 语义。候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。SQLite owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
+原文关键词在 AnySeek 中按词项编码执行 AND 匹配（查询词项全部出现），限定当前 scope、发布代和完整来源版本。摘要分支对 AnySeek 的独立摘要字段执行同一 chunk 内的 AND 匹配，使用 BM25 排名后参与融合。候选身份缺失或不一致会明确失败，不静默返回少召回结果。hybrid 将 keyword/vector/summary 映射为 chunk 证据后 RRF 融合，并按实体名种子扩展一跳关系；每个图对象包含 `evidence`（asset_id/version/chunk_id/source_event_id/locator）。SQLite owner 和 committed 账本决定图证据是否有效；不会返回已撤回来源的描述投影。
 
 省略 `mode` 时使用关键词检索，所有查询词项须出现在同一索引分块内。hybrid 的原文关键词分支也采用这条规则。OR 匹配仅用于 #149 冻结语料的基准实验。[实验 #154](https://github.com/TheLudlows/Origence/pull/154)
 

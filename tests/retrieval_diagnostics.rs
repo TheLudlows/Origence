@@ -3,7 +3,7 @@ use crate::support::{fixture, open_service};
 use origence::{
     client::HostClient,
     models::Models,
-    storage::{RelationalStore, Scope},
+    storage::{RelationalStore, Scope, sqlite_db as db},
     worker,
 };
 use reqwest::{Method, StatusCode};
@@ -318,6 +318,19 @@ async fn run_diagnostics_are_private_durable_and_replay_original_evidence() {
         recorded["events"][0]["report"]["bundle_digest"],
         origence::storage::hash(serde_json::to_vec(&bundle).unwrap())
     );
+    assert!(!bundle.rendered_context.is_empty());
+    let stored: String = db::query_scalar(
+        "SELECT payload FROM oc_run_events WHERE tenant_id=? AND workspace_id=? AND run_id=? AND sequence=1",
+    )
+    .bind(scope.tenant_id)
+    .bind(scope.workspace_id)
+    .bind(run)
+    .fetch_one(authority.pool())
+    .await
+    .unwrap();
+    let stored: Value = serde_json::from_str(&stored).unwrap();
+    assert_eq!(stored["replay_bundle"]["rendered_context"], "");
+    assert!(stored["replay_bundle_digest"].is_string());
     let remote = fixture(dir.path(), None);
     remote.unavailable(true);
     remote.clear_queries();

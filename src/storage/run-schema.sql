@@ -30,7 +30,7 @@ CREATE INDEX oc_run_measurements_workspace_created ON oc_run_measurements(tenant
 CREATE INDEX oc_run_measurements_owner_created ON oc_run_measurements(tenant_id,workspace_id,owner_key_id,created_at);
 CREATE TABLE oc_run_verifications (
     tenant_id BLOB NOT NULL, workspace_id BLOB NOT NULL, run_id BLOB NOT NULL,
-    verification_id BLOB NOT NULL, payload TEXT NOT NULL, record TEXT NOT NULL,
+    verification_id BLOB NOT NULL, record TEXT NOT NULL,
     withdrawal TEXT,
     PRIMARY KEY(tenant_id,workspace_id,run_id,verification_id)
 );

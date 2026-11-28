@@ -212,6 +212,7 @@ impl SqliteTx {
         if kind == "session_turn" {
             self.require_session_source_visible(id).await?;
         }
+        let content = self.render_event_text(id, &kind, content).await?;
         Ok(
             json!({"event_id":event_id,"kind":kind,"content":content,"file_id":file_id,"created_at":created_at}),
         )
@@ -224,23 +225,29 @@ impl SqliteTx {
     ) -> StorageResult<Option<String>> {
         self.require_private_source(source).await?;
         let sql = if require_active {
-            "SELECT content FROM oc_events WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND state = 'active'"
+            "SELECT kind,content FROM oc_events WHERE tenant_id = ? AND workspace_id = ? AND id = ? AND state = 'active'"
         } else {
-            "SELECT content FROM oc_events WHERE tenant_id = ? AND workspace_id = ? AND id = ?"
+            "SELECT kind,content FROM oc_events WHERE tenant_id = ? AND workspace_id = ? AND id = ?"
         };
-        sqlite_db::query_scalar(sql)
+        let row: Option<(String, String)> = sqlite_db::query_as(sql)
             .bind(self.scope.tenant_id)
             .bind(self.scope.workspace_id)
             .bind(source)
             .fetch_optional(&mut *self.tx)
             .await
-            .map_err(sqlite_err)
+            .map_err(sqlite_err)?;
+        match row {
+            Some((kind, content)) => {
+                Ok(Some(self.render_event_text(source, &kind, content).await?))
+            }
+            None => Ok(None),
+        }
     }
 
     pub(super) async fn event_file_inner(&mut self, source: Uuid) -> StorageResult<Value> {
         self.require_private_source(source).await?;
-        let row: Option<(String, Option<Uuid>)> = sqlite_db::query_as(
-            "SELECT content,file_id FROM oc_events WHERE id=? AND tenant_id=? AND workspace_id=?",
+        let row: Option<(String, String, Option<Uuid>)> = sqlite_db::query_as(
+            "SELECT kind,content,file_id FROM oc_events WHERE id=? AND tenant_id=? AND workspace_id=?",
         )
         .bind(source)
         .bind(self.scope.tenant_id)
@@ -248,7 +255,7 @@ impl SqliteTx {
         .fetch_optional(&mut *self.tx)
         .await
         .map_err(sqlite_err)?;
-        let Some((content, file_id)) = row else {
+        let Some((kind, content, file_id)) = row else {
             return Err(StorageError::NotFound);
         };
         // Unlike event_view, historical file reads retain the event and its
@@ -267,12 +274,25 @@ impl SqliteTx {
             None
         };
         let (hash, media_type) = file.unwrap_or((None, None));
+        let content = self.render_event_text(source, &kind, content).await?;
         Ok(json!({
             "content": content,
             "file_id": file_id,
             "hash": hash,
             "media_type": media_type,
         }))
+    }
+
+    async fn render_event_text(
+        &mut self,
+        source: Uuid,
+        kind: &str,
+        content: String,
+    ) -> StorageResult<String> {
+        if kind == "learning" && content.is_empty() {
+            return self.learning_source_text(source).await;
+        }
+        Ok(content)
     }
 
     pub(super) async fn register_owner_inner(

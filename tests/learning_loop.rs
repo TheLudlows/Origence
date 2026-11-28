@@ -499,7 +499,40 @@ async fn direct_experience_uses_workspace_basis_without_archiving_a_turn() {
         .retain_long_term_memory(&writer, "direct-confirmation", parse(&confirmation))
         .await
         .unwrap();
+    let source_id = id(&accepted, "source_event_id");
+    let raw_source: String = db::query_scalar(
+        "SELECT content FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(writer.tenant_id)
+    .bind(writer.workspace_id)
+    .bind(source_id)
+    .fetch_one(s.engine.relational().pool())
+    .await
+    .unwrap();
+    assert!(raw_source.is_empty());
     drain(&s).await;
+    let source = s.source_event(&writer, source_id).await.unwrap();
+    assert_eq!(
+        source["content"],
+        format!(
+            "Conditional learning\nConditions:\n{CONDITION}\n\nStatement:\nAtlas parsers must bound input.\n\nWhy:\nThe reviewed team note fixes that scope."
+        )
+    );
+    let published = s
+        .get(&reader, id(&accepted, "asset_id"), Some(1))
+        .await
+        .unwrap();
+    assert_eq!(published["content"], source["content"]);
+    let completed_plan: Option<String> = db::query_scalar(
+        "SELECT json_extract(payload,'$.publication') FROM oc_jobs WHERE tenant_id=? AND workspace_id=? AND id=?",
+    )
+    .bind(writer.tenant_id)
+    .bind(writer.workspace_id)
+    .bind(id(&accepted, "job_id"))
+    .fetch_one(s.engine.relational().pool())
+    .await
+    .unwrap();
+    assert!(completed_plan.is_none());
     let recall = async || {
         serde_json::to_value(
             s.recall_long_term_memories(
@@ -980,10 +1013,7 @@ async fn learning_http_end_to_end_uses_ingest_and_citations_in_another_session()
     assert!(snapshot["items"][0]["turn"].get("question").is_none());
     assert!(snapshot["items"][0]["turn"].get("answer").is_none());
     let quote_digest = json!(origence::storage::hash(ANSWER));
-    assert_eq!(
-        proposal["candidates"][0]["supports"][0]["quote"],
-        quote_digest
-    );
+    assert_eq!(proposal, json!({"candidate_count":1}));
     let candidate: String = db::query_scalar("SELECT candidate FROM oc_learnings WHERE id=?")
         .bind(id(&run["learnings"][0], "learning_id"))
         .fetch_one(pool)

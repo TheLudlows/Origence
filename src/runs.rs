@@ -62,7 +62,7 @@ impl Service {
         tx.commit().await?;
         match replay {
             Some(value) => Ok(Some(
-                self.restore_archive_run_bundle(a, run, event_id, request_digest, value)
+                self.restore_run_bundle(a, run, event_id, request_digest, value)
                     .await?,
             )),
             None => Ok(None),
@@ -83,7 +83,7 @@ impl Service {
         tx.commit().await?;
         match replay {
             Some(value) => Ok(Some(
-                self.restore_archive_run_bundle(a, run, event_id, request_digest, value)
+                self.restore_run_bundle(a, run, event_id, request_digest, value)
                     .await?,
             )),
             None => Ok(None),
@@ -141,13 +141,13 @@ impl Service {
         // A concurrent preparer may have committed the same event before
         // this write transaction. Reuse bodies already read and authorized
         // only when the complete saved digest matches this candidate.
-        if let Some(proof) = result.get("archive_bundle_digest")
+        if let Some(proof) = result.get("original_bundle_digest")
             && *proof == prepared_bundle_hash(bundle)?
         {
-            fill_archive_bundle(&mut result, bundle)?;
+            fill_replayed_bundle(&mut result, bundle)?;
         }
         tx.commit().await?;
-        self.restore_archive_run_bundle(a, run, event_id, request_digest, result)
+        self.restore_run_bundle(a, run, event_id, request_digest, result)
             .await
     }
 
@@ -183,7 +183,7 @@ impl Service {
         Ok(Some(archive))
     }
 
-    async fn restore_archive_run_bundle(
+    async fn restore_run_bundle(
         &self,
         a: &AuthContext,
         run: Uuid,
@@ -191,12 +191,12 @@ impl Service {
         request_digest: &str,
         mut preparation: Value,
     ) -> Result<Value> {
-        let Some(proof) = preparation.get("archive_bundle_digest") else {
+        let Some(proof) = preparation.get("original_bundle_digest") else {
             return Ok(preparation);
         };
         let mut bundle: EvidenceBundle =
             serde_json::from_value(preparation["recorded_bundle"].clone())
-                .map_err(|_| invalid_archive_bundle())?;
+                .map_err(|_| invalid_run_bundle())?;
         for item in &mut bundle.items {
             if let Some(archive) = self.native_run_archive(a, &item.provenance).await? {
                 item.content = run_archive_content(&archive.body);
@@ -209,32 +209,30 @@ impl Service {
             .replay_run_context_prepared(run, event_id, request_digest)
             .await?;
         if current.as_ref() != Some(&preparation) {
-            return Err(invalid_archive_bundle());
+            return Err(invalid_run_bundle());
         }
         bundle.rendered_context = crate::evidence::restore_rendered_context(&bundle);
         if *proof != prepared_bundle_hash(&bundle)? {
-            return Err(invalid_archive_bundle());
+            return Err(invalid_run_bundle());
         }
-        fill_archive_bundle(&mut preparation, &bundle)?;
+        fill_replayed_bundle(&mut preparation, &bundle)?;
         tx.commit().await?;
         Ok(preparation)
     }
 }
 
-fn invalid_archive_bundle() -> AppError {
-    AppError::Unavailable("invalid prepared archive snapshot".into())
+fn invalid_run_bundle() -> AppError {
+    AppError::Unavailable("invalid prepared Run snapshot".into())
 }
 
 fn prepared_bundle_hash(bundle: &EvidenceBundle) -> Result<String> {
-    let encoded = serde_json::to_string(bundle).map_err(|_| invalid_archive_bundle())?;
+    let encoded = serde_json::to_string(bundle).map_err(|_| invalid_run_bundle())?;
     Ok(crate::storage::hash(encoded))
 }
 
-fn fill_archive_bundle(preparation: &mut Value, bundle: &EvidenceBundle) -> Result<()> {
-    let response = preparation
-        .as_object_mut()
-        .ok_or_else(invalid_archive_bundle)?;
-    response.remove("archive_bundle_digest");
+fn fill_replayed_bundle(preparation: &mut Value, bundle: &EvidenceBundle) -> Result<()> {
+    let response = preparation.as_object_mut().ok_or_else(invalid_run_bundle)?;
+    response.remove("original_bundle_digest");
     response.insert("recorded_bundle".into(), serde_json::json!(bundle));
     Ok(())
 }
@@ -268,6 +266,19 @@ impl Service {
         input.validate().map_err(|e| AppError::Invalid(e.into()))?;
         let mut tx = self.write(a, Permission::Write).await?;
         let result = tx.record_run_verification(run, &input).await?;
+        tx.commit().await?;
+        Ok(result)
+    }
+
+    pub async fn link_run_verification(
+        &self,
+        a: &AuthContext,
+        run: Uuid,
+        input: crate::run_verification::RunVerificationLink,
+    ) -> Result<Value> {
+        let mut tx = self.write(a, Permission::Write).await?;
+        let input = crate::run_verification::VerificationInput::Linked(input);
+        let result = tx.record_verification(run, &input).await?;
         tx.commit().await?;
         Ok(result)
     }

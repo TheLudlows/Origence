@@ -30,9 +30,9 @@ With the host stopped and no nonempty WAL, read-only admission uses an immutable
 
 ## Collection shared by text and indexes
 
-Each `origence-content-sha256-v1` Record represents one chunk. `payload` is stored unindexed JSON with original UTF-8 text, full locator, optional summary, and model version. The same Record's `terms`, vector, and graph retain existing retrieval behavior. No separate whole-text, version, or summary Record alters BM25 corpus count. SQLite no longer saves `oc_versions.content`, `oc_chunks.content`, `oc_summaries.text`, `oc_chunks.search_terms`, or `oc_summaries.model_revision`. Chunk terms are AnySeek-only, summary model versions live in payload, and SQLite retains only terms used by Summary retrieval.
+Each `origence-content-sha256-v1` Record represents one chunk. `payload` is stored unindexed JSON with original UTF-8 text, full locator, optional summary, and model version. The same Record supplies `terms`, a dedicated `summary_terms` field, vector, and graph to their retrieval branches. SQLite removes the `oc_summaries` table and separate summary owners. Summary model versions live in the chunk payload.
 
-SQL retains source and visibility locators, frozen Summary terms, Run/Skill receipts, and recovery plans.
+SQL retains source and visibility locators, Run/Skill receipts, and recovery metadata.
 Private AnySeek collections hold complete Q&A, the turn directory, and search fields. SQLite
 holds workspace and logical-key ownership, session sequence allocation, command receipts, and
 proofs for actual dependencies. AnySeek deletes each body and its index as one group and retains the
@@ -64,7 +64,7 @@ Parse AnySeek payload outside transactions and compare chunk hash and full locat
 
 `index entry` and `publication ledger` have distinct keys, states, and lifecycles. They cannot substitute for each other. ready plus committed does not establish visibility. Reads still check permissions, current content item version, sources, owner, and semantic snapshot or Learning supports. Job generation, business version, model profile, and execution run_token are independent identities.
 
-All publication paths generate text and summary terms once in a blocking task outside transactions and freeze them with the plan. Retry must reuse original terms. Missing fields mean a corrupt plan and do not trigger tokenization. Persist the complete plan and pending ledger first, then write text, summary, locators, and indexes to the same AnySeek Record outside the transaction and revalidate and commit authoritatively. Prepared MessageBatch plans persist with a lightweight receipt digest. Same-generation recovery reuses the plan and verifies the digest. Missing or corrupt data fails explicitly. The digest neither replaces actual index and ledger checks nor rescans all vectors. Job attempts and error text remain with the queue, and the job controls retry limits and execution fencing.
+Term generation runs in blocking tasks outside transactions. Model-backed jobs save the exact pending plan, and summary terms are derived from the fixed summary in that plan. Ordinary model-free jobs persist the generation, operation epoch, and plan SHA-256. A rebuilt plan must match the original digest. Both paths persist recovery metadata and the pending ledger before writing text, summary, locators, and indexes to the same AnySeek Record outside the transaction. The final authority transaction revalidates and commits. Prepared MessageBatch plans persist with a lightweight receipt digest. Same-generation recovery reuses the plan and verifies the digest. Missing or corrupt data fails explicitly. The digest neither replaces actual index and ledger checks nor rescans all vectors. Job attempts and error text remain with the queue, and the job controls retry limits and execution fencing.
 
 ## Sources and validity
 

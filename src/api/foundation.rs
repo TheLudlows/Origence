@@ -340,13 +340,19 @@ async fn record_run_verification(
     State(service): State<Service>,
     headers: HeaderMap,
     Path(run): Path<Uuid>,
-    Json(input): Json<crate::run_verification::RunVerificationInput>,
+    Json(input): Json<crate::run_verification::VerificationInput>,
 ) -> Result<Json<Value>> {
-    Ok(Json(
-        service
-            .record_run_verification(&auth(&service, &headers).await?, run, input)
-            .await?,
-    ))
+    use crate::run_verification::VerificationInput;
+    let caller = auth(&service, &headers).await?;
+    let record = match input {
+        VerificationInput::Linked(input) => {
+            service.link_run_verification(&caller, run, input).await?
+        }
+        VerificationInput::Transcribed(input) => {
+            service.record_run_verification(&caller, run, input).await?
+        }
+    };
+    Ok(Json(record))
 }
 async fn withdraw_run_verification(
     State(service): State<Service>,

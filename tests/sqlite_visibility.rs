@@ -58,9 +58,6 @@ async fn seed(store: &SqliteStore, scope: Scope, ids: EvidenceIds) -> Authorized
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.chunk).bind(ids.asset)
         .bind(scope.workspace_id.to_string()).bind(ids.locator().to_string())
         .execute(store.pool()).await.unwrap();
-    db::query("INSERT INTO oc_summaries(tenant_id,workspace_id,id,chunk_id,search_terms) VALUES(?,?,?,?,'summary')")
-        .bind(scope.tenant_id).bind(scope.workspace_id).bind(Uuid::new_v4()).bind(ids.chunk)
-        .execute(store.pool()).await.unwrap();
     db::query("INSERT INTO oc_index_entries(tenant_id,workspace_id,artifact_id,field,model_id,dimension,generation,state,created_at) VALUES(?,?,?,'content','profile-visibility',7,11,'ready',0)")
         .bind(scope.tenant_id).bind(scope.workspace_id).bind(ids.chunk)
         .execute(store.pool()).await.unwrap();
@@ -87,13 +84,6 @@ async fn assert_visibility(
     let mut tx = store.begin_read(auth.clone()).await.unwrap();
     assert_eq!(tx.visible_hit(ids.chunk).await.unwrap().is_some(), visible);
     for filter in [None, Some(ids.asset)] {
-        let hits = tx.summary_hits("summary", filter).await.unwrap();
-        assert_eq!(hits.len(), usize::from(visible));
-        for hit in hits {
-            assert_eq!(hit.content_hash, auth.scope.workspace_id.to_string());
-            assert_eq!(hit.source_event_id, ids.member);
-            assert_eq!(hit.version, 3);
-        }
         assert_eq!(
             tx.vector_candidates("profile-visibility", 7, 11, filter)
                 .await
@@ -183,12 +173,6 @@ async fn sqlite_visibility_binds_scope_filters_and_vector_publication_independen
             .is_none()
         );
     }
-    assert!(
-        tx.summary_hits("summary", Some(Uuid::new_v4()))
-            .await
-            .unwrap()
-            .is_empty()
-    );
     tx.commit().await.unwrap();
 
     // Active copies of the exact same UUIDs in another workspace or tenant
@@ -274,12 +258,6 @@ async fn sqlite_visibility_preserves_invalid_support_and_malformed_locator_resul
     let mut tx = store.begin_read(auth.clone()).await.unwrap();
     assert!(matches!(
         tx.visible_hit(ids.chunk).await,
-        Err(StorageError::Backend(_))
-    ));
-    tx.rollback().await.unwrap();
-    let mut tx = store.begin_read(auth.clone()).await.unwrap();
-    assert!(matches!(
-        tx.summary_hits("summary", None).await,
         Err(StorageError::Backend(_))
     ));
     tx.rollback().await.unwrap();

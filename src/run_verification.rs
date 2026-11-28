@@ -1,4 +1,4 @@
-//! Owner-transcribed assessments; never platform verification or access grants.
+//! External assessment references and owner transcriptions.
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -29,6 +29,61 @@ pub struct RunVerificationInput {
     pub basis_summary: String,
     pub basis_sequences: Vec<i64>,
     pub reported_skill_version: Option<ReportedSkillVersion>,
+}
+
+/// A reference to an assessment owned by a separate system. The identifier is
+/// opaque to Origence and confers no access to the external result.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct RunVerificationLink {
+    pub verification_id: Uuid,
+    pub through_sequence: i64,
+    pub prefix_digest: String,
+    pub external_ref: String,
+}
+
+#[cfg(feature = "sqlite")]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub(crate) enum VerificationInput {
+    Linked(RunVerificationLink),
+    Transcribed(RunVerificationInput),
+}
+
+#[cfg(feature = "sqlite")]
+impl VerificationInput {
+    pub(crate) fn binding(&self) -> (Uuid, i64, &str) {
+        match self {
+            Self::Linked(input) => (
+                input.verification_id,
+                input.through_sequence,
+                &input.prefix_digest,
+            ),
+            Self::Transcribed(input) => (
+                input.verification_id,
+                input.through_sequence,
+                &input.prefix_digest,
+            ),
+        }
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), &'static str> {
+        match self {
+            Self::Transcribed(input) => input.validate(),
+            Self::Linked(input) => {
+                if input.verification_id.is_nil()
+                    || !(1..=10000).contains(&input.through_sequence)
+                    || !crate::retrieval_diagnostics::digest(&input.prefix_digest)
+                    || input.external_ref.trim() != input.external_ref
+                    || !(1..=512).contains(&input.external_ref.len())
+                    || input.external_ref.chars().any(char::is_control)
+                {
+                    return Err("invalid external verification reference");
+                }
+                Ok(())
+            }
+        }
+    }
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]

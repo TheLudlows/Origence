@@ -41,7 +41,9 @@ truth. Untrusted turn text, feedback and model responses cannot grant authority.
    retry uses that child's existing job and persisted plans.
 6. Advance the session cursor only after every accepted child has published and all
    other frozen outcomes are durably accounted. Empty/rejected-only plans do not
-   create fake content items. Cancelled/revoked/stale workers cannot finalize publication.
+   create fake content items. The completion transaction discards proposal text and
+   keeps the count, verification decisions, and child receipts. Cancelled/revoked/stale
+   workers cannot finalize publication.
 
 Input is bounded to 32 feedback records and 128 KiB of frozen model input.
 Each fully serialized proposal/verification request, including conditions and the
