@@ -16,7 +16,7 @@ Claude Code 与 Codex 已通过同 Key 会话互读和独立 Run 验收。双向
 | Skill | [从 Run 详情选取依据、起草及提交审阅](SKILL-CANDIDATE-CLI.zh-CN.md#在控制台从-run-起草)、[选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)、选定审阅包、精确批准、不可变发布、在线下载。单 Key 工作区由管理员审核，批准后单独发布。历史 Windows 公开样例验证了两端原生加载及撤回来源后的访问限制。见[实测记录](../evals/pilot/native-skill.windows.json) | 两场景未见题跨端复用与独立核验、受管在线重载 |
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核。默认关键词检索要求查询词项全部出现。真实引擎本地回归通过。日常上下文按预算组装带业务日期、时间线和固定引用的归纳事实，控制台可核对原始来源。[证据包契约](contracts/evidence-bundle.zh-CN.md) | 当前后端的模型检索质量、容量与延迟验收 |
-| 会话与反馈 | AnySeek 保存新轮次的正文和目录，按逻辑 Key 隔离。控制台「会话」显示已保存的问答。支持按 ID 与序号读取、关键词与向量召回、显式反馈。成员授权空间按权限删除问答，单 Key 工作空间保留原始会话。经验可用人工确认或固定文档版本直接提交，也可走 Improve。 | 在 P0 双场景任务中核对会话和反馈证据 |
+| 会话与反馈 | AnySeek 保存新轮次的正文和目录，按逻辑 Key 隔离。控制台「会话」显示已保存的问答。支持按 ID 与序号读取、关键词与向量召回、显式反馈。工作空间保留原始会话。经验可用人工确认或固定文档版本直接提交，也可走 Improve。 | 在 P0 双场景任务中核对会话和反馈证据 |
 | Node.js 管理界面 | 工作空间 Key 登录、部署管理员跨空间查看和全局知识审核，以及受限目录、异步入库、固定版本与来源、Run 列表与创建趋势。运行总览显示可选中复制的当前工作区 ID。管理员通过账号进入实例管理。 [#76](https://github.com/TheLudlows/Origence/issues/76) 已结项。 | 冻结任务的端到端追溯由 [#91](https://github.com/TheLudlows/Origence/issues/91) 验收。 |
 
 精确测试环境、提交和结果见 [VALIDATION](VALIDATION.md)。
@@ -52,7 +52,7 @@ SQLite 仍保存不可变经验候选，以及 Run 精确回放所需的普通�
 Claude Code 和 Codex 插件通过 Origence 服务端的 `/mcp` 检索和调用工具。检索无需安装本地 Origence。服务端按请求校验凭据和工作区权限，未指定工作区时使用凭据的默认工作区。
 两个插件共用 Node.js Hook，负责 Run 上报和可选归档。见[客户端接入](CLIENTS.md#直连-http-mcp)与[验证](VALIDATION.md)。
 
-工作空间 Key 和成员授权工作区的管理员可在控制台「Agent 连接」查看本空间正在处理的 MCP 请求和最近五分钟的活动，
+工作区 Key 可在控制台「Agent 连接」查看本空间正在处理的 MCP 请求和最近五分钟的活动，
 按凭据汇总并显示握手识别的客户端类型。观测限于当前服务进程。见 [Agent 连接接口](API.md#agent-连接)。
 
 ## #105 客户端 Hook 本地切片
@@ -68,7 +68,7 @@ Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提�
 
 ## 工作区凭据
 
-控制台管理员账号使用独立凭据。每把工作区 Key 固定在签发时的工作区，HTTP 和 MCP 的工作区参数用于一致性核对。旧成员 Key 的签发、轮换和撤销接口目前仅限原工作区。会话按工作区和逻辑 Key 隔离。见 [API](API.md#身份与密钥管理)。
+控制台管理员账号使用独立凭据。每把工作区 Key 固定在签发时的工作区，HTTP 和 MCP 的工作区参数用于一致性核对。新 Key 由管理员在选定工作区轮换。会话按工作区和逻辑 Key 隔离。见 [API](API.md#身份与密钥管理)。
 
 ## AnySeek 服务凭据与 workspace 集合
 

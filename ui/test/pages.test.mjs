@@ -140,7 +140,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     if (path.pathname === "/api/admin/agents") {
       if (agentState === "unavailable") return response({ error: { message: "连接列表不可读取" } }, 503);
       return response({ workspace_id: ids.asset, window_seconds: 300, capacity_reached: false,
-        items: agentState === "active" ? [{ role: "writer", observation: {
+        items: agentState === "active" ? [{ role: "workspace", observation: {
           credential_id: ids.otherKey, client_kinds: ["codex", "claude_code"],
           last_seen_at_ms: 1000, active_requests: 2,
         } }] : [] });
@@ -677,7 +677,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     const { editor } = await import("../dist/client/asset-editor.js");
     const { trackJob } = await import("../dist/client/jobs.js");
     const lifetime = new AbortController();
-    const ctx = { signal: lifetime.signal, role: "writer", navigate() {} };
+    const ctx = { signal: lifetime.signal, role: "workspace", navigate() {} };
     const target = document.createElement("div");
     document.body.append(target);
     for (const state of ["failed", "superseded"]) {
@@ -711,7 +711,7 @@ test("five-page DOM flows preserve API contracts, retry identity, version links 
     const { trackJob } = await import("../dist/client/jobs.js");
     const lifetime = new AbortController();
     const target = document.createElement("div");
-    const ctx = { signal: lifetime.signal, role: "writer", navigate() {} };
+    const ctx = { signal: lifetime.signal, role: "workspace", navigate() {} };
     document.body.append(target);
     try {
       jobState = "failed";

@@ -21,7 +21,7 @@ Trace is stored in Runs owned by logical keys. Run entry points derive the key f
 | `POST /v1/runs` | Supply a stable `run_id` and redacted `summary` using the Workspace Key. The Run is bound to the current archive. |
 | `POST /v1/runs/{id}/events` | Stable `event_id`, timestamp, reporter, and named event. An identical retry returns the original sequence. |
 | `POST /v1/runs/{id}/context` | `event_id` and `context` (EvidenceBundle request). Returns the bundle and a server preparation receipt. |
-| `GET /v1/runs/{id}?after=0&limit=50` | Paginated trace for the owner or an admin in the Run's workspace. `is_owner` identifies whether the current logical key owns the Run. |
+| `GET /v1/runs/{id}?after=0&limit=50` | Paginated trace for the owning Workspace Key. `is_owner` identifies whether the current logical key owns the Run. |
 | `GET /v1/runs/{id}/prefix?through_sequence=N` | Immutable prefix digest for the current key, usable as Skill evidence |
 
 The server receipt proves preparation of the exact context, without proving client receipt or model use. The client reports tools, loads, results, feedback, and artifact references. Unreported activities remain unknown. When any source becomes invalid, reference verification prevents further delivery. The Run owner can link an external verification record or transcribe its result over HTTP for an exact prefix. The service records how the owner supplied it and the claimed verifier identity status. See the [Run contract](contracts/runs.md) and [external verification contract](contracts/run-verification.md).
@@ -36,7 +36,7 @@ Trace reads include the text recorded in the Run. Original private archives, int
 | `GET /v1/skill-reviews/{review}` | Selected review packet, decision, and `published` state. |
 | `POST /v1/skill-reviews/{review}/publish` | The candidate owner publishes an administrator-approved package using `{digest}`. |
 | `GET /v1/skills/{id}/versions/{version}/package` | Verifies scope, version, and source and returns a package containing only approved artifacts. |
-| `DELETE /v1/skills/{id}/versions/{version}` | A writer or admin withdraws the published Skill version and blocks later package downloads. |
+| `DELETE /v1/skills/{id}/versions/{version}` | A Workspace Key withdraws the published Skill version and blocks later package downloads. |
 
 Changing the candidate revision, the review package contents, or the destination requires a new approval. Original sessions and review evidence are not distributed with packages. The caller submits a candidate, or binds a manually drafted method to an exact source using the selected-experience CLI. See the [Skill contract](contracts/skills.md) and [selected-experience CLI](SKILL-CANDIDATE-CLI.md) for package format and boundaries.
 
@@ -76,11 +76,11 @@ The old standalone graph storage API and graph traversal were removed. `StorageE
 
 - `SqliteStore::check_memory_identity(path)` performs a full same-version schema check on an existing path under a read-only exclusive lock. It neither creates nor repairs tables.
 - Command idempotency, job execution, and artifact owner/index/ledger responsibilities are distinct. See [storage invariants](contracts/storage.en.md).
-- The owning workspace and message batch APIs are below. External protocol fields cannot enter generic storage or authorization decisions.
+- The message batch APIs are below. External protocol fields cannot enter generic storage or authorization decisions.
 
 ## Roles
 
-Each workspace has one active Key. Authentication returns `role: "workspace"` for this credential. The Key permits content operations in that workspace, including memory deletion. Original turns support append and read. Deleting a turn, clearing a session, or deleting a turn through the source endpoint returns 403 for a Workspace Key.
+Each workspace has one active Key. Authentication returns `role: "workspace"` for this credential. The Key permits content operations in that workspace, including memory deletion. Original turns support append and read. The source endpoint rejects attempts to withdraw an original archived turn.
 
 The administrator creates workspaces, rotates Keys, and can manage content in an explicitly selected workspace. Publication rechecks permissions and sources before commit.
 
@@ -106,7 +106,7 @@ A content item here is a versioned memory or knowledge entry identified by `asse
 
 Use `PUT /admin/deployment/workspaces/{id}` with `{name}` to create a peer single-key workspace and issue its key in the same transaction. Only initial creation returns `key:{key_id,token}`. A retry with the same ID and name returns `created:false`. If the first credential is lost, `POST /admin/deployment/workspaces/{id}/keys/rotate` issues a replacement, revokes the previous key, and preserves logical identity and sessions.
 
-The administrator console rotates the single key of the selected workspace. Existing member credentials can still be used and maintained through the [direct workspace key endpoints](#identity-and-credential-management).
+The administrator console rotates the single key of the selected workspace.
 
 The following paths are relative to `/admin/deployment/workspaces/{id}`. The `{id}` in the path selects the workspace. Content and job writes use `Idempotency-Key`. Skill retries use the review ID and packet digest. Audit entries record the administrator credential's internal identity, which changes on administrator credential rotation.
 
@@ -124,7 +124,7 @@ Restore and withdrawal follow the workspace's version and source rules. Semantic
 
 ### Global knowledge
 
-Each deployment has one shared knowledge catalog. A workspace writer can submit an exact published version. Repeating a submission returns the original publication ID and review state. A deployment administrator moderates submissions.
+Each deployment has one shared knowledge catalog. A caller using a Workspace Key can submit an exact published version. Repeating a submission returns the original publication ID and review state. A deployment administrator moderates submissions.
 
 | Method and path | Behavior |
 | --- | --- |
@@ -141,7 +141,7 @@ Approval revalidates the original version. The approved copy survives updates or
 
 ### Agent connections
 
-`GET /admin/agents` accepts a workspace key or a membership-based workspace administrator. The bearer credential and optional `X-Origence-Workspace` header determine the workspace. The response has
+`GET /admin/agents` accepts a workspace key. The bearer credential and optional `X-Origence-Workspace` header determine the workspace. The response has
 `workspace_id`, `window_seconds` (300), `capacity_reached`, and `items`. Each
 item has its current `role` and an `observation` with `credential_id`,
 `last_seen_at_ms`, `active_requests`, and `client_kinds`. New reads exclude
@@ -188,7 +188,7 @@ The Node.js UI uses these and the HTTP endpoints below. It never opens databases
 | `GET /health/ready` | Single Worker running and local storage checks passed. External model health is separate. |
 | `POST /v1/memories` | `{fact_key,content}` (`publish_if_authorized` is deprecated and accepted without effect) → `asset_id`, `source_event_id`, and `job_id`, `state:"accepted"`. `conflict` indicates append to an existing fact. |
 | `POST /v1/memories/identified` | `{identity:{subject:{kind,stable_id},predicate,context:{}},content}` → `asset_id` / `source_event_id` / `job_id`. The same scoped identity reuses the content item. `conflict` indicates an existing version. |
-| `POST /v1/memories/lookup` | Complete `{subject,predicate,context:{}}`, readable by reader. Returns the same current published view as `GET /v1/assets/{id}`. No Idempotency-Key or content item creation. |
+| `POST /v1/memories/lookup` | Complete `{subject,predicate,context:{}}`, readable with a Workspace Key. Returns the same current published view as `GET /v1/assets/{id}`. No Idempotency-Key or content item creation. |
 | `POST /v1/memories/retain` | Submit fact text, selected feedback, or an experience with human confirmation or a pinned document version. Returns a job receipt. [Long-term memory contract](contracts/memory-consolidation.md) |
 | `POST /v1/memories/long-term/recall` | Retrieve facts and experiences together by query. |
 | `POST /v1/memories/long-term/lookup` | Read fact details by exact identity. |
@@ -280,7 +280,7 @@ Supported subject kinds are user/agent/project/service/team. stable_id is a stab
 
 Content item reads add `identity`, null for legacy memory or knowledge. Identity is bound to a content item and immutable, and cannot be recreated after deletion. Legacy fact_key/capture writes cannot modify an identified content item and return 409. If a legacy fact key collides with new identity encoding, the new entry point returns 409 without converting it.
 
-lookup accepts the identity above without content and matches exactly in the key's scope. Aliases and semantic approximations are unsupported. Missing, unpublished, deleted, or source-withdrawn content items return 404, without falling back or creating content items, sources, or jobs. A missing identity table is an error, not a valid miss or empty result. The returned version is not a write lock. The final job version check remains authoritative, and reader cannot access original capture input through lookup.
+lookup accepts the identity above without content and matches exactly in the key's scope. Aliases and semantic approximations are unsupported. Missing, unpublished, deleted, or source-withdrawn content items return 404, without falling back or creating content items, sources, or jobs. A missing identity table is an error, not a valid miss or empty result. The returned version is not a write lock. The final job version check remains authoritative.
 
 New databases always contain the complete identity schema. Startup rejects absent tables and incompatible databases. It neither falls back to legacy-only endpoints nor installs or upgrades automatically. See [OPERATIONS](OPERATIONS.en.md#memory-identity-checks) for the read-only check. Legacy captures still use fact_key and explicit write/capture uses HTTP. Read-only MCP supports memory_identity filtering.
 
@@ -296,7 +296,7 @@ No automatic subject inference, alias normalization, arbitrary semantic merging,
 
 `GET /v1/assets/{id}` returns normalization_status. Explicitly bound memory uses explicit_identity. Standalone evidence uses unnormalized, including conflicts, negations, proposals, ambiguities, and evidence saved separately by the older extraction endpoints. Legacy fact_key memory uses legacy_unidentified, and knowledge uses not_applicable. The status describes identity binding only, without assessing truth or model semantics. Historical versions use the same content item identity. Legacy memory is not normalized automatically.
 
-Writer can use GET /v1/events/{id} to compare a search locator's byte range with the original source, including for failed or zero-result capture. Original input can contain unpublished content and reader cannot access it. Withdrawn sources, deleted file sources, and sources from another workspace are unavailable. Logical deletion retains underlying original text, with no physical erasure feature. Memory semantics supplies a separate status for unnormalized memories. Automatic identity merging is unimplemented.
+A Workspace Key can use GET /v1/events/{id} to compare a search locator's byte range with the original source, including for failed or zero-result capture. Withdrawn sources, deleted file sources, and sources from another workspace are unavailable. Logical deletion retains underlying original text, with no physical erasure feature. Memory semantics supplies a separate status for unnormalized memories. Automatic identity merging is unimplemented.
 
 ## Identity annotation in retrieval and context
 
@@ -324,7 +324,7 @@ The following capabilities are available through the public Rust Service API.
 - MessageBatch batch_id/session_id are 1–4096 UTF-8 bytes without NUL. Each batch has 1–256 messages and a total body limit of 1,000,000 UTF-8 bytes under general text validation. role is a verbatim 1–64 UTF-8 byte label, not blank and containing no controls, for example system/tool, and grants no privilege. timestamp is optional signed i64 Unix milliseconds. Omitted/null values do not use current time, and timestamps do not reorder messages.
 - `AcceptedMessageSpec::raw_only(profile)` pins `message-batch-ranges-v1`, parser_version=1, chunking_version=1, raw_only=true, and embedding profile. Admission writes the full specification into the original job payload. The full batch and spec enter the request hash. Reusing a key with changed content/session/order/role/time/parser/profile/mode conflicts without a new job. Recovery and explicit retry retain the original specification. Processing refuses model profile mismatch.
 - `IngestReceipt` holds original `asset_id` / `source_event_id` / `job_id`, target version, and specification, not a permanent success. `message_batch_status` / `wait_message_batch` reauthorize and observe that batch, distinguishing Pending, Retrievable, Failed, CancelledOrSuperseded, and Invisible. Retrievable requires the exact target version, a valid source, original chunks indexed for all target profiles, and matching ledger generation.
-- A valid new key in the same workspace can find the same receipt. `job.created_by` records the original submitter. See [jobs and read visibility](#jobs-and-read-visibility) for single-key rotation. For member keys, revocation or demotion prevents another key from taking over the existing job. Worker, retry, final publication, and post-I/O reads revalidate live permissions. Cleanup is privileged reclamation. A current admin may explicitly retry cleanup after the creator is revoked.
+- A valid new key in the same workspace can find the same receipt. `job.created_by` records the original submitter. See [jobs and read visibility](#jobs-and-read-visibility) for single-key rotation. Worker, retry, final publication, and post-I/O reads revalidate live permissions. Cleanup is privileged reclamation. A current admin may explicitly retry cleanup after the creator is revoked.
 - Original source JSON keeps complete batch/session/role/timestamp and input order. Chunk locators include source_event_id, external_batch_id, message_index, source_path, UTF-8 byte_start/end within the message, and parser spec. Batches in the same session are not differentiated solely by local message_index. Raw batches do not fabricate SessionTurn or Feedback.
 
 ## Explicit memory semantics
@@ -401,7 +401,7 @@ Locators use the original source and byte ranges from memory semantics. New extr
 
 Callers explicitly submit SessionTurn archives. `state:"archived"` confirms archival and `state:"recorded"` confirms feedback. Submit experience [directly](contracts/memory-consolidation.md#写入), or use [Improve](#explicit-improve--learning) to derive it from archives and feedback.
 
-Reading and writing archive turns and feedback require writer or above. `session_id` must be bound to the authenticated logical key. Tenant, workspace, and logical key are authentication-derived. Reads, writes, and retries recheck credential validity. session_id, turn_id, feedback_id, and evidence UUIDs must be non-nil. POST requires `Idempotency-Key`. Unknown fields, missing required fields, and unknown enum values are rejected.
+Reading and writing archive turns and feedback require the Workspace Key. `session_id` must be bound to the authenticated logical key. Tenant, workspace, and logical key are authentication-derived. Reads, writes, and retries recheck credential validity. session_id, turn_id, feedback_id, and evidence UUIDs must be non-nil. POST requires `Idempotency-Key`. Unknown fields, missing required fields, and unknown enum values are rejected.
 
 `POST /v1/sessions/{session_id}/turns` example.
 
@@ -445,22 +445,10 @@ Feedback request examples for the original turn or an exact archived reference r
 
 rating accepts only helpful/unhelpful/neutral as the caller's judgment, without inferring truth. comment is optional or null and capped at 4096 UTF-8 bytes. Targets must belong to the archived turn in the path. Feedback may not refer to unused hits, other turns, or other scopes. At most 256 immutable entries per turn. At capacity, new entries return 409 while exact replays can still succeed without truncation. The unique domain key is tenant/workspace/principal/feedback_id. The same semantic request reuses results; changed turn, target, rating, or comment returns 409. Feedback does not overwrite, edit, or delete prior ratings or directly change ranking or weights. POST returns `{session_id,turn_id,feedback_id,principal_id,feedback_sequence,state:"recorded"}`. GET returns `{session_id,turn_id,feedback:[...]}`. Feedback retains the original request and created_by/created_at. Turn GET also includes feedback.
 
-An owning writer deletes one turn with `DELETE /v1/sessions/{session_id}/turns/{turn_id}`.
-To clear history, freeze the string `through_sequence` from the archive listing and call
-`DELETE /v1/sessions/{session_id}?through_sequence=<cutoff>&after=0`. Continue with the returned
-string `next_after` until it is `null`. Retry with the same cutoff and cursor. Already deleted
-turns can be confirmed again. Newer turns remain available and the same logical key can keep archiving.
-Admins can also delete a source in their own archive through `DELETE /v1/events/{source_event_id}`.
-Use the original idempotency key when retrying this endpoint.
+Archived turns support append and read. Workspace and administrator APIs retain the original turns.
+[Backup and recovery](OPERATIONS.en.md#private-archive-and-paired-recovery)
 
-The server reports deletion success after confirmation from AnySeek. Group versions fence delayed writes.
-When a Run or published experience has used a turn, normal source retraction makes its proof unavailable
-before issuing the delete. If AnySeek fails or its response is lost, that proof remains unavailable and
-the console shows that deletion is unconfirmed and offers a retry. Run history retains the event
-position. Affected context events return a summary and a `private_sources_unavailable` count.
-[Cleanup and backups](OPERATIONS.en.md#private-archive-and-paired-recovery)
-
-The session route is off by default. A caller without live writer permission receives 403 before model calls.
+The session route is off by default and requires an active Workspace Key.
 `session_id` and `exclude_session_id` require the session route. Keyword, vector, and hybrid
 search use the workspace and logical-key collection. Origence deduplicates by turn ID and checks
 live authorization and withdrawal before delivery. `scanned` counts directory candidates before
@@ -474,9 +462,9 @@ embedding is unavailable.
 
 New databases only. Existing extraction configuration provides proposals and independent verification without an additional provider, trigger, rank reweighting, or identity override. Call explicitly.
 
-- `POST /v1/sessions/{session_id}/improve` (writer+, Idempotency-Key). `{improve_id,conditions:["仅在 staging 发布时"],max_feedback:32}`. improve_id must be non-nil and body immutable. conditions is required with 1–8 distinct nonblank entries, each at most 256 UTF-8 bytes. max_feedback defaults to 32, range 1–32.
-- `GET /v1/improvements/{improve_id}` (writer+). Returns status, parent job, frozen watermark, counts, persisted proposal/verification state, Learning child jobs, and safe errors. Frozen Q&A and raw model responses are omitted. These administrative fields remain readable after dependency withdrawal.
-- `GET /v1/learnings/{learning_id}` (original logical key only). Returns still-valid published Learning with public statement, conditions, and private support pointers without original Q&A quotes. Other workspace members reuse public content and conditions through Search/Bundle.
+- `POST /v1/sessions/{session_id}/improve` (Workspace Key, Idempotency-Key). `{improve_id,conditions:["仅在 staging 发布时"],max_feedback:32}`. improve_id must be non-nil and body immutable. conditions is required with 1–8 distinct nonblank entries, each at most 256 UTF-8 bytes. max_feedback defaults to 32, range 1–32.
+- `GET /v1/improvements/{improve_id}` (Workspace Key). Returns status, parent job, frozen watermark, counts, persisted proposal/verification state, Learning child jobs, and safe errors. Frozen Q&A and raw model responses are omitted. These administrative fields remain readable after dependency withdrawal.
+- `GET /v1/learnings/{learning_id}` (original logical key only). Returns still-valid published Learning with public statement, conditions, and private support pointers without original Q&A quotes. The owning workspace can reuse the public content and conditions through Search/Bundle.
 
 Feedback uses a monotonic workspace-transaction feedback_sequence. Identity remains tenant/workspace/principal/feedback_id. Equal or backward timestamps do not affect batching. A freeze contains up to 32 feedback entries and 128 KiB JSON. An oversized first entry fails without consuming the watermark. Each fully serialized proposal or verification model request is also capped at 128 KiB. A verification request that exceeds it after adding candidates fails before sending and without consuming the watermark. Cancel and retry with a smaller batch. Turns invalid at freeze keep only skip IDs, without hidden text. At most one accepted/publishing run per session. Repeating a command or improve_id reuses its domain result and changed requests return 409.
 
@@ -500,7 +488,7 @@ Optional fields include `mode` keyword (default)/vector/hybrid, `allow_partial` 
 
 `memory_identity` only restricts memory by exact subject, predicate, and conditions. Knowledge and Learning scopes are unaffected. `applicability_context` is up to 32 nonblank caller condition strings, each at most 256 bytes. Every Learning condition must match verbatim to mark `caller_context_exact_match`. Otherwise retain and mark `unverified`. Neither establishes actual applicability.
 
-The memory route includes consolidated topics for ordinary queries such as `{"query":"What is Atlas's domestic hotel reimbursement limit?","as_of_ms":1796083200000}`. `as_of_ms` selects the fact's business time in Unix milliseconds, defaulting to now. Each `long_term_memory` provenance has the chosen `state`, versioned `timeline`, and original UTF-8 quote spans. `conflicting` and `unknown` have no selected value. The console opens the original as a writer or verifies the published quote as a reader. [Field and budget details](contracts/evidence-bundle.md#typed-provenance-and-applicability)
+The memory route includes consolidated topics for ordinary queries such as `{"query":"What is Atlas's domestic hotel reimbursement limit?","as_of_ms":1796083200000}`. `as_of_ms` selects the fact's business time in Unix milliseconds, defaulting to now. Each `long_term_memory` provenance has the chosen `state`, versioned `timeline`, and original UTF-8 quote spans. `conflicting` and `unknown` have no selected value. The console opens the original text and verifies the published quote. [Field and budget details](contracts/evidence-bundle.md#typed-provenance-and-applicability)
 
 See the [session archive and retrieval rules](#session-archiving-and-idempotent-feedback).
 
@@ -510,7 +498,7 @@ Deterministic conflict grouping applies only to confirmed/conflict values under 
 
 All titles, citations, conditions, sources, conflict warnings, and separators count toward the actual UTF-8 context budget. Each consolidated topic and its citations form one whole block. Native memory, knowledge, and Learning retrieval share one embedding and use separate candidate filters and budgets. Native retrieval uses raw chunks. Stable round robin and route caps are neutral engineering defaults, not verified optimal quality weights.
 
-**Archive limitation**. Chunk-backed memory, knowledge, and Learning items can convert to legacy chunk used_evidence. `SessionTurn.used_evidence` accepts chunk/entity/relation. The response marks unsupported citations as `unsupported_session_turn_reference` or `unsupported_long_term_memory_reference`. Learning citations for reader include support IDs and ranges without original supporting-turn Q&A or quotes.
+**Archive limitation**. Chunk-backed memory, knowledge, and Learning items can convert to legacy chunk used_evidence. `SessionTurn.used_evidence` accepts chunk/entity/relation. The response marks unsupported citations as `unsupported_session_turn_reference` or `unsupported_long_term_memory_reference`. Learning citations shown outside their owning archive include support IDs and ranges without original supporting-turn Q&A or quotes.
 
 See the [EvidenceBundle contract](contracts/evidence-bundle.md). Run real Agent comparisons independently. Fixtures test the tool/model interaction framework and provide no evidence of task gains.
 

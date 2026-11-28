@@ -26,7 +26,7 @@ async function expect(response, status, operation) {
   if (response.status !== status) {
     await response.body?.cancel();
     const cause = response.status === 401 ? "HTTP 401. Check the credential and its expiry or revocation"
-      : response.status === 403 ? "HTTP 403. Check the workspace, token role and server policy"
+      : response.status === 403 ? "HTTP 403. Check the workspace and server policy"
       : response.status >= 300 && response.status < 400 ? "redirect refused. Use the final endpoint"
       : `HTTP ${response.status}. Check the configured service and endpoint`;
     throw new Error(`${operation} failed (${cause}).`);
@@ -42,7 +42,7 @@ async function json(response, operation) {
 export async function identity(endpoint, token) {
   const response = await responseAt(endpoint, "/v1/whoami", { headers: { Authorization: "Bearer " + token } });
   const result = await json(await expect(response, 200, "API identity"), "API identity");
-  check(uuid.test(result.workspace_id) && uuid.test(result.id) && ["admin", "writer", "reader", "workspace"].includes(result.role),
+  check(uuid.test(result.workspace_id) && uuid.test(result.id) && result.role === "workspace",
     "The API did not return an Origence workspace and key identity.");
   return result;
 }

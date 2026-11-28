@@ -13,7 +13,7 @@ pub trait FixtureKeys {
         workspace_id: Uuid,
         name: &str,
     ) -> StorageResult<()>;
-    async fn issue_key(&self, scope: Scope, role: &str) -> StorageResult<IssuedKey>;
+    async fn seed_workspace_key(&self, scope: Scope) -> StorageResult<IssuedKey>;
     async fn revoke_key(&self, key_id: Uuid) -> StorageResult<()>;
 }
 
@@ -48,20 +48,18 @@ impl FixtureKeys for SqliteStore {
         Ok(())
     }
 
-    async fn issue_key(&self, scope: Scope, role: &str) -> StorageResult<IssuedKey> {
-        assert!(matches!(role, "reader" | "writer" | "admin"));
+    async fn seed_workspace_key(&self, scope: Scope) -> StorageResult<IssuedKey> {
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
         sqlite_db::query(
-            "INSERT INTO oc_api_keys(id, logical_key_id, tenant_id, workspace_id, token_hash, role, revoked, created_at) \
-             VALUES (?, ?, ?, ?, ?, ?, 0, ?)",
+            "INSERT INTO oc_api_keys(id, logical_key_id, tenant_id, workspace_id, token_hash, revoked, created_at) \
+             VALUES (?, ?, ?, ?, ?, 0, ?)",
         )
         .bind(key_id)
         .bind(key_id)
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
         .bind(hash(&token))
-        .bind(role)
         .bind(fixture_time())
         .execute(self.pool())
         .await

@@ -28,8 +28,8 @@ async function run(binary) {
   const secrets = [];
   let host, ui, browser, stderr = "";
   try {
-    const a = seedWorkspace(directory, "研发", undefined, true);
-    const b = seedWorkspace(directory, "运营", a.workspace_id, true);
+    const a = seedWorkspace(directory, "研发", undefined);
+    const b = seedWorkspace(directory, "运营", a.workspace_id);
     const deploymentKey = "oc_admin_" + randomBytes(32).toString("hex");
     env.OC_DEPLOYMENT_ADMIN_KEY = deploymentKey;
     secrets.push(a.token, b.token, deploymentKey);

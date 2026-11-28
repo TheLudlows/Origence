@@ -122,7 +122,7 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
         (run) => button(`${short(run.run_id)} · ${run.status}`, () => openRun(run), "link")));
     const label = (kind: Asset["kind"]) => kind === "memory" ? "记忆" : "知识";
     const editContext = (kind: Asset["kind"], signal: AbortSignal): ViewContext => ({
-      role: "admin", signal,
+      signal,
       navigate: (page, id, version) => {
         if (page === "asset" && id) openAsset(kind, id, version);
         else if (page === kind) assets(kind);

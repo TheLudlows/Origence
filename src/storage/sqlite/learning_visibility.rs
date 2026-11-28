@@ -895,13 +895,10 @@ mod tests {
             store.create_workspace(tenant, id, "fixture").await.unwrap();
         }
         let key = store
-            .issue_key(
-                Scope {
-                    tenant_id: tenant,
-                    workspace_id: workspace,
-                },
-                "admin",
-            )
+            .seed_workspace_key(Scope {
+                tenant_id: tenant,
+                workspace_id: workspace,
+            })
             .await
             .unwrap();
         let auth = store.authenticate(&key.token).await.unwrap();
@@ -988,7 +985,7 @@ mod tests {
             .create_workspace(scope.tenant_id, scope.workspace_id, "fixture")
             .await
             .unwrap();
-        let key = store.issue_key(scope, "admin").await.unwrap();
+        let key = store.seed_workspace_key(scope).await.unwrap();
         let auth = store.authenticate(&key.token).await.unwrap();
         let principal = auth.principal_id;
         let mut tx = store.begin(auth).await.unwrap();

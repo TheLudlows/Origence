@@ -41,8 +41,8 @@ async fn credential(conn: &mut Connection, token: &str) -> StorageResult<Authori
     if token.len() < 32 || token.len() > 256 {
         return Err(StorageError::Forbidden);
     }
-    let (tenant_id, workspace_id, principal_id, role) = sqlite_db::query_as(
-        "SELECT tenant_id,workspace_id,id,role FROM oc_api_keys WHERE token_hash=? AND NOT revoked",
+    let (tenant_id, workspace_id, principal_id) = sqlite_db::query_as(
+        "SELECT tenant_id,workspace_id,id FROM oc_api_keys WHERE token_hash=? AND NOT revoked",
     )
     .bind(hash(token))
     .fetch_optional(conn)
@@ -55,6 +55,6 @@ async fn credential(conn: &mut Connection, token: &str) -> StorageResult<Authori
             workspace_id,
         },
         principal_id,
-        role,
+        role: "workspace".into(),
     })
 }

@@ -1,7 +1,6 @@
 //! Loopback protocol fixture, not an AnySeek engine or ranking-acceptance test.
 //! Real SQLite, public Service/worker and HTTP adapter code remain under test.
 #![allow(dead_code)] // Shared by two integration executables with different fixture needs.
-use crate::fixture_keys::FixtureKeys;
 use axum::{
     Json, Router,
     extract::{Path as RoutePath, Query, State},
@@ -911,63 +910,44 @@ pub async fn seed_workspace(
     name: &str,
     parent: Option<uuid::Uuid>,
 ) -> serde_json::Value {
-    fixture_workspace::seed_workspace(dir, name, parent, false)
+    fixture_workspace::seed_workspace(dir, name, parent)
         .await
         .unwrap()
 }
 
 pub async fn seed_key_workspace(dir: &Path, name: &str) -> serde_json::Value {
-    fixture_workspace::seed_workspace(dir, name, None, true)
+    fixture_workspace::seed_workspace(dir, name, None)
         .await
         .unwrap()
 }
 
-/// Additional principals are seeded only by fixtures exercising low-level boundaries.
-pub async fn seed_member_key(
+/// Provision an independent workspace in the same tenant for isolation tests.
+pub async fn seed_isolated_key(
     service: &Service,
     workspace: &origence::types::AuthContext,
-    role: &str,
 ) -> Value {
-    let store = service.engine.relational();
     let scope = Scope {
         tenant_id: workspace.tenant_id,
-        workspace_id: workspace.workspace_id,
+        workspace_id: Uuid::new_v4(),
     };
-    json!(store.issue_key(scope, role).await.unwrap())
+    json!(
+        service
+            .engine
+            .relational()
+            .create_key_workspace(scope, "Isolated fixture")
+            .await
+            .unwrap()
+    )
 }
 
-/// Replace a synthetic principal's credential while preserving its ownership.
-pub async fn rotate_fixture_key(
+/// Remove the live proof in tests of fail-closed archive readers.
+pub async fn invalidate_archive_proof(
     service: &Service,
-    workspace: &origence::types::AuthContext,
-    key: Uuid,
-) -> Value {
-    let store = service.engine.relational();
-    let mut tx = store.pool().begin_with("BEGIN IMMEDIATE").await.unwrap();
-    let (logical, role, created_at): (Uuid, String, i64) = sqlite_db::query_as(
-        "SELECT logical_key_id,role,created_at FROM oc_api_keys
-         WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT revoked",
-    )
-    .bind(workspace.tenant_id)
-    .bind(workspace.workspace_id)
-    .bind(key)
-    .fetch_one(&mut *tx)
-    .await
-    .unwrap();
-    let key_id = Uuid::new_v4();
-    let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
-    sqlite_db::query("UPDATE oc_api_keys SET revoked=1 WHERE id=?")
-        .bind(key)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
-    sqlite_db::query(
-        "INSERT INTO oc_api_keys(id,logical_key_id,tenant_id,workspace_id,token_hash,role,created_at)
-         VALUES(?,?,?,?,?,?,?)",
-    )
-    .bind(key_id).bind(logical).bind(workspace.tenant_id).bind(workspace.workspace_id)
-    .bind(hash(&token)).bind(role).bind(created_at)
-    .execute(&mut *tx).await.unwrap();
-    tx.commit().await.unwrap();
-    json!({"key_id":key_id,"token":token})
+    auth: &origence::types::AuthContext,
+    source: Uuid,
+) {
+    let changed = sqlite_db::query("UPDATE oc_events SET state='retracted' WHERE tenant_id=? AND workspace_id=? AND id=? AND kind='session_turn'")
+        .bind(auth.tenant_id).bind(auth.workspace_id).bind(source)
+        .execute(service.engine.relational().pool()).await.unwrap();
+    assert_eq!(changed.rows_affected(), 1);
 }

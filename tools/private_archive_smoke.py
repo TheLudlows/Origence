@@ -223,9 +223,9 @@ def run_contract(binary, root, model, anyseek):
             proxy.release = threading.Event()
             env.update(OC_ANYSEEK_URL=proxy_url, OC_ANYSEEK_API_KEY=key)
             forbidden.append(key)
-        owner = seed_workspace(env, "private fixture", single_key=True)
+        owner = seed_workspace(env, "private fixture")
         administrator = admin_env(env)
-        foreign = seed_workspace(env, "second workspace", owner["workspace_id"], single_key=True)
+        foreign = seed_workspace(env, "second workspace", owner["workspace_id"])
         token = owner["token"]
         forbidden.extend([token, administrator, foreign["token"]])
         turn = new_turn(MARKER + " Café question")

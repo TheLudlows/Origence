@@ -171,8 +171,17 @@ async fn turn_sync_pairs_both_clients_and_replays_lost_receipts_without_leaking_
         .create_workspace(scope.tenant_id, scope.workspace_id, "synthetic turn sync")
         .await
         .unwrap();
-    let owner = store.issue_key(scope, "admin").await.unwrap();
-    let other = store.issue_key(scope, "admin").await.unwrap();
+    let owner = store.seed_workspace_key(scope).await.unwrap();
+    let other = store
+        .create_key_workspace(
+            Scope {
+                workspace_id: Uuid::new_v4(),
+                ..scope
+            },
+            "Other workspace",
+        )
+        .await
+        .unwrap();
     let adjacent = Scope {
         workspace_id: Uuid::new_v4(),
         ..scope
@@ -368,32 +377,22 @@ async fn turn_sync_pairs_both_clients_and_replays_lost_receipts_without_leaking_
     ));
 
     let owner_auth = service.auth(&owner.token).await.unwrap();
-    service
-        .delete(
-            &owner_auth,
-            "withdraw-synthetic-turn",
-            uuid(&first_view, "source_event_id"),
-            "event",
-        )
-        .await
-        .unwrap();
     assert!(matches!(
-        authorized
-            .call(Method::GET, &path(&first), None, None)
-            .await,
-        Err(AppError::NotFound)
-    ));
-    assert!(matches!(
-        authorized
-            .call(
-                Method::POST,
-                &format!("/v1/sessions/{session}/turns"),
-                Some(&first),
-                Some("withdrawn-turn-sync-replay")
+        service
+            .delete(
+                &owner_auth,
+                "withdraw-synthetic-turn",
+                uuid(&first_view, "source_event_id"),
+                "event"
             )
             .await,
-        Err(AppError::NotFound)
+        Err(AppError::Forbidden)
     ));
+    let still_saved = authorized
+        .call(Method::GET, &path(&first), None, None)
+        .await
+        .unwrap();
+    assert_eq!(still_saved, first_view);
     assert!(
         authorized
             .call(Method::GET, &path(&second), None, None)

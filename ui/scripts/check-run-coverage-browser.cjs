@@ -31,7 +31,7 @@ const upstream = createServer((req, res) => {
   if (url.pathname === "/v1/whoami")
     return pageFailure === 401
       ? send({ error: { message: "合成凭据已撤销" } }, 401)
-      : send({ id: populated.run_id, workspace_id: empty.run_id, role: "reader" });
+      : send({ id: populated.run_id, workspace_id: empty.run_id, role: "workspace" });
   if (url.pathname === "/v1/runs") return send(pageResult([populated, empty]));
   if (url.pathname === `/v1/runs/${populated.run_id}/verifications`) {
     verificationRequests++;

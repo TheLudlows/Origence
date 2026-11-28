@@ -139,7 +139,7 @@ async fn provision(service: &Service) -> (String, AuthContext) {
     let key = service
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     let auth = service.auth(&key.token).await.unwrap();
@@ -709,9 +709,14 @@ async fn workspace_replay_preserves_creator_and_all_spec_input_conflicts() {
         .await
         .unwrap();
     let (_, auth) = provision(&service).await;
-    let replacement = crate::support::seed_member_key(&service, &auth, "admin").await;
+    let admin = service
+        .engine
+        .relational()
+        .rotate_deployment_admin()
+        .await
+        .unwrap();
     let other = service
-        .auth(replacement["token"].as_str().unwrap())
+        .authorize_deployment_workspace(&admin, auth.workspace_id)
         .await
         .unwrap();
     let input = batch("full:external:batch");
@@ -1021,9 +1026,14 @@ async fn revoked_creator_cannot_publish_or_transfer_work_through_replay() {
         .await
         .unwrap();
     let (_, auth) = provision(&service).await;
-    let replacement = crate::support::seed_member_key(&service, &auth, "admin").await;
+    let admin = service
+        .engine
+        .relational()
+        .rotate_deployment_admin()
+        .await
+        .unwrap();
     let rotated = service
-        .auth(replacement["token"].as_str().unwrap())
+        .authorize_deployment_workspace(&admin, auth.workspace_id)
         .await
         .unwrap();
     let receipt = service

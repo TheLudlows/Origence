@@ -36,7 +36,7 @@ async fn provision(s: &Service, tenant: Option<Uuid>) -> (AuthContext, String) {
     let key = s
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     (s.auth(&key.token).await.unwrap(), key.token)
@@ -486,15 +486,10 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
     let (a, token) = provision(&s, None).await;
     let (neighbor, _) = provision(&s, Some(a.tenant_id)).await;
     let (foreign, _) = provision(&s, None).await;
-    let reader_key = crate::support::seed_member_key(&s, &a, "reader").await;
-    let reader_token = reader_key["token"].as_str().unwrap();
-    let reader = s.auth(reader_token).await.unwrap();
-    let writer_key = crate::support::seed_member_key(&s, &a, "writer").await;
-    let writer = s.auth(writer_key["token"].as_str().unwrap()).await.unwrap();
     memory(&s, &a, "scope", "Scopeneedle public workspace memory").await;
     let session = id(&s.private_session(&a).await.unwrap(), "session_id");
     archive(&s, &a, session, "Scopeneedle private raw session", vec![]).await;
-    let default = bundle(&s, &reader, json!({"query":"Scopeneedle","budget":32000})).await;
+    let default = bundle(&s, &a, json!({"query":"Scopeneedle","budget":32000})).await;
     assert_eq!(items(&default).len(), 1);
     assert!(
         items(&default)
@@ -514,11 +509,6 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
         assert_eq!(isolated["tenant_id"], json!(other.tenant_id));
         assert_eq!(isolated["workspace_id"], json!(other.workspace_id));
     }
-    assert!(matches!(
-        s.evidence_bundle(&reader, serde_json::from_value(input.clone()).unwrap())
-            .await,
-        Err(AppError::Forbidden)
-    ));
     // A serialized bundle request is read-only across every relational table.
     let before = counts(&s).await;
     let (base, _api) = serve(origence::api::router(s.clone())).await;
@@ -537,7 +527,8 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
     );
     let response = http
         .post(format!("{base}/v1/context"))
-        .bearer_auth(reader_token)
+        .bearer_auth(&token)
+        .header("X-Origence-Workspace", neighbor.workspace_id.to_string())
         .json(&input)
         .send()
         .await
@@ -564,20 +555,17 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
         .unwrap();
     assert_eq!(response.status(), 422);
     assert_eq!(counts(&s).await, before);
-    db::query("UPDATE oc_api_keys SET role='reader' WHERE id=?")
-        .bind(writer.id)
-        .execute(s.engine.relational().pool())
+    s.engine
+        .relational()
+        .rotate_workspace_key(Scope {
+            tenant_id: a.tenant_id,
+            workspace_id: a.workspace_id,
+        })
         .await
         .unwrap();
     assert!(matches!(
-        s.evidence_bundle(&writer, serde_json::from_value(input).unwrap())
-            .await,
-        Err(AppError::Forbidden)
-    ));
-    s.engine.relational().revoke_key(reader.id).await.unwrap();
-    assert!(matches!(
         s.evidence_bundle(
-            &reader,
+            &a,
             serde_json::from_value(json!({"query":"Scopeneedle"})).unwrap()
         )
         .await,
@@ -585,7 +573,7 @@ async fn evidence_session_scope_permissions_live_keys_and_http_match_service() {
     ));
     let response = http
         .post(format!("{base}/v1/context"))
-        .bearer_auth(reader_token)
+        .bearer_auth(&token)
         .json(&json!({"query":"Scopeneedle"}))
         .send()
         .await
@@ -637,7 +625,7 @@ async fn evidence_session_index_finds_older_matches_and_enforces_private_scope()
     assert_eq!(accounting(&bounded, "session")["scan_exhausted"], false);
     // Filtering a different key's session never bypasses private ownership,
     // even when its turn would otherwise match the query.
-    let key = crate::support::seed_member_key(&s, &a, "writer").await;
+    let key = crate::support::seed_isolated_key(&s, &a).await;
     let other = s.auth(key["token"].as_str().unwrap()).await.unwrap();
     let other_session = id(&s.private_session(&other).await.unwrap(), "session_id");
     archive(
@@ -1050,7 +1038,7 @@ async fn evidence_session_citations_use_the_full_session_and_turn_identity() {
         .unwrap();
     let (a, _) = provision(&s, None).await;
     let turn = Uuid::new_v4();
-    let key = crate::support::seed_member_key(&s, &a, "writer").await;
+    let key = crate::support::seed_isolated_key(&s, &a).await;
     let other = s.auth(key["token"].as_str().unwrap()).await.unwrap();
     let mut citations = BTreeSet::new();
     for actor in [&a, &other] {
@@ -1146,32 +1134,17 @@ async fn evidence_embeds_once_and_rechecks_visibility_and_keys_after_external_io
     )
     .await;
     let surviving = knowledge(&s, &a, "Guardneedle independently supported document").await;
-    let reader_key = crate::support::seed_member_key(&s, &a, "reader").await;
-    let reader = s.auth(reader_key["token"].as_str().unwrap()).await.unwrap();
     let mut input = request("Guardneedle", &["memory", "knowledge", "learning"]);
     input["mode"] = json!("hybrid");
     let before_calls = gate.calls.load(Ordering::SeqCst);
-    let initial = bundle(&s, &reader, input.clone()).await;
+    let initial = bundle(&s, &a, input.clone()).await;
     assert_eq!(items(&initial).len(), 2);
     assert_eq!(gate.calls.load(Ordering::SeqCst) - before_calls, 1);
     assert_eq!(initial["effective_mode"], "hybrid");
-    // A forbidden session request is rejected before sending even the query to
-    // the provider; three other enabled routes do not downgrade this boundary.
-    let mut forbidden = input.clone();
-    forbidden["routes"].as_array_mut().unwrap().push(json!({
-        "route":"session","limit":20,"max_bytes":4000
-    }));
-    let before_calls = gate.calls.load(Ordering::SeqCst);
-    assert!(matches!(
-        s.evidence_bundle(&reader, serde_json::from_value(forbidden).unwrap())
-            .await,
-        Err(AppError::Forbidden)
-    ));
-    assert_eq!(gate.calls.load(Ordering::SeqCst), before_calls);
     gate.block.store(true, Ordering::SeqCst);
     let pending = {
         let service = s.clone();
-        let auth = reader.clone();
+        let auth = a.clone();
         let request = input.clone();
         tokio::spawn(async move {
             service
@@ -1211,7 +1184,7 @@ async fn evidence_embeds_once_and_rechecks_visibility_and_keys_after_external_io
     assert_accounted(&after);
     let pending = {
         let service = s.clone();
-        let auth = reader.clone();
+        let auth = a.clone();
         tokio::spawn(async move {
             service
                 .evidence_bundle(&auth, serde_json::from_value(input).unwrap())
@@ -1221,7 +1194,14 @@ async fn evidence_embeds_once_and_rechecks_visibility_and_keys_after_external_io
     tokio::time::timeout(Duration::from_secs(15), gate.entered.notified())
         .await
         .expect("second query did not reach the embedding barrier");
-    s.engine.relational().revoke_key(reader.id).await.unwrap();
+    s.engine
+        .relational()
+        .rotate_workspace_key(Scope {
+            tenant_id: a.tenant_id,
+            workspace_id: a.workspace_id,
+        })
+        .await
+        .unwrap();
     gate.release.notify_one();
     let denied = tokio::time::timeout(Duration::from_secs(15), pending)
         .await

@@ -55,16 +55,12 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/v1/knowledge", post(knowledge))
         .merge(super::global_knowledge::routes())
         .route(
-            "/v1/sessions/{session_id}",
-            axum::routing::delete(withdraw_session),
-        )
-        .route(
             "/v1/sessions/{session_id}/turns",
             post(archive_turn).get(session_turns),
         )
         .route(
             "/v1/sessions/{session_id}/turns/{turn_id}",
-            get(session_turn).delete(withdraw_turn),
+            get(session_turn),
         )
         .route(
             "/v1/sessions/{session_id}/turns/{turn_id}/feedback",
@@ -495,40 +491,6 @@ async fn session_turns(
             page.limit.unwrap_or(16),
         )
         .await?,
-    ))
-}
-
-#[derive(Deserialize)]
-struct ArchiveDeleteRange {
-    through_sequence: i64,
-    after: Option<i64>,
-}
-
-async fn withdraw_session(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path(session): Path<Uuid>,
-    Query(range): Query<ArchiveDeleteRange>,
-) -> Result<Json<Value>> {
-    Ok(Json(
-        s.clear_session_archive(
-            &auth(&s, &h).await?,
-            session,
-            range.after.unwrap_or(0),
-            range.through_sequence,
-        )
-        .await?,
-    ))
-}
-
-async fn withdraw_turn(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path((session, turn)): Path<(Uuid, Uuid)>,
-) -> Result<Json<Value>> {
-    Ok(Json(
-        s.withdraw_session_archive(&auth(&s, &h).await?, session, turn)
-            .await?,
     ))
 }
 

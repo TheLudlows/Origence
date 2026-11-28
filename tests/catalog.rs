@@ -34,10 +34,8 @@ async fn run_metering_scopes_reports_retries_and_exact_totals() {
             .await
             .unwrap();
     }
-    let owner = store.issue_key(scope, "writer").await.unwrap();
-    let other = store.issue_key(scope, "writer").await.unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
-    let outsider = store.issue_key(elsewhere, "admin").await.unwrap();
+    let owner = store.seed_workspace_key(scope).await.unwrap();
+    let outsider = store.seed_workspace_key(elsewhere).await.unwrap();
     let owner_auth = service.auth(&owner.token).await.unwrap();
     let end = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -52,8 +50,6 @@ async fn run_metering_scopes_reports_retries_and_exact_totals() {
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let client = |token: &str| HostClient::new(&base, token.to_owned()).unwrap();
     let owner_http = client(&owner.token);
-    let other_http = client(&other.token);
-    let admin_http = client(&admin.token);
     let outsider_http = client(&outsider.token);
 
     let create = |client: HostClient, scope: Scope, created_at: i64| {
@@ -109,7 +105,8 @@ async fn run_metering_scopes_reports_retries_and_exact_totals() {
             .unwrap(),
         receipt
     );
-    for client in [&other_http, &admin_http, &outsider_http] {
+    {
+        let client = &outsider_http;
         assert!(matches!(
             client.call(Method::POST, &events, Some(&zero), None).await,
             Err(AppError::NotFound)
@@ -179,8 +176,8 @@ async fn run_metering_scopes_reports_retries_and_exact_totals() {
             .await
             .unwrap();
     }
-    let run = create(other_http.clone(), scope, end - 1).await;
-    other_http.call(Method::POST, &format!("/v1/runs/{run}/events"), Some(&report(json!({
+    let run = create(outsider_http.clone(), elsewhere, end - 1).await;
+    outsider_http.call(Method::POST, &format!("/v1/runs/{run}/events"), Some(&report(json!({
         "duration_ms":2000,"agent_tokens":17,"estimated_cost":{"currency":"CNY","micros":1500000},
         "billed_cost":{"currency":"USD","micros":2}
     }))), None).await.unwrap();
@@ -211,26 +208,21 @@ async fn run_metering_scopes_reports_retries_and_exact_totals() {
             .await
             .unwrap()
     };
-    let workspace = read(admin_http.clone()).await;
-    assert_eq!(workspace["scope"], "workspace");
-    assert_eq!(workspace["metering"]["agent_tokens"], "217");
+    let workspace = read(owner_http.clone()).await;
+    assert_eq!(workspace["scope"], "current_logical_key");
+    assert_eq!(workspace["metering"]["agent_tokens"], "200");
     assert_eq!(
         workspace["metering"]["costs"],
         json!([
-            {"basis":"estimated","currency":"CNY","micros":"1500000","runs":1},
             {"basis":"estimated","currency":"USD","micros":"0","runs":1},
-            {"basis":"billed","currency":"USD","micros":"9007199254740993","runs":2}
+            {"basis":"billed","currency":"USD","micros":"9007199254740991","runs":1}
         ])
     );
-    assert_eq!(overview(other_http).await["metering"]["agent_tokens"], "17");
     assert_eq!(
-        overview(outsider_http).await["metering"],
-        json!({
-            "duration_p95_ms":null,"duration_runs":0,"agent_tokens":null,"token_runs":0,"costs":[]
-        })
+        overview(outsider_http).await["metering"]["agent_tokens"],
+        "17"
     );
-    let admin_auth = service.auth(&admin.token).await.unwrap();
-    let rotated = crate::support::rotate_fixture_key(&service, &admin_auth, owner.key_id).await;
+    let rotated = store.rotate_workspace_key(scope).await.unwrap();
     assert!(
         owner_http
             .call(Method::GET, "/v1/runs/overview", None, None)
@@ -238,7 +230,7 @@ async fn run_metering_scopes_reports_retries_and_exact_totals() {
             .is_err()
     );
     assert_eq!(
-        read(client(rotated["token"].as_str().unwrap())).await["metering"]["agent_tokens"],
+        read(client(&rotated.token)).await["metering"]["agent_tokens"],
         "200"
     );
     assert!(service.run_trace(&owner_auth, first, 0, 10).await.is_err());
@@ -259,12 +251,13 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "UI")
         .await
         .unwrap();
-    let admin_key = store.issue_key(scope, "admin").await.unwrap();
-    let other_key = store.issue_key(scope, "admin").await.unwrap();
-    let reader_key = store.issue_key(scope, "reader").await.unwrap();
-    let admin = s.auth(&admin_key.token).await.unwrap();
-    let other = s.auth(&other_key.token).await.unwrap();
-    let reader = s.auth(&reader_key.token).await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
+    let admin = s.auth(&key.token).await.unwrap();
+    let token = store.rotate_deployment_admin().await.unwrap();
+    let reader = s
+        .authorize_deployment_workspace(&token, scope.workspace_id)
+        .await
+        .unwrap();
     let mut sources = Vec::new();
     for index in 0..3 {
         let receipt = s.identified_memory(&admin, &Uuid::new_v4().to_string(), serde_json::from_value(json!({
@@ -346,7 +339,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
     .await
     .unwrap();
     s.create_run(
-        &other,
+        &admin,
         RunInput {
             run_id: other_run,
             summary: "other private task".into(),
@@ -360,7 +353,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         ("feedback", "success"),
     ] {
         s.append_run_event(
-            &other,
+            &admin,
             other_run,
             serde_json::from_value(json!({
                 "event_id":Uuid::new_v4(),"reporter":"client","observed_at_ms":0,
@@ -371,23 +364,32 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         .await
         .unwrap();
     }
-    let runs = s.list_runs(&admin, Uuid::nil(), 1).await.unwrap();
+    let runs = s
+        .inspect_runs(&token, scope.workspace_id, Uuid::nil(), 1)
+        .await
+        .unwrap();
     assert_eq!(runs["scope"], "workspace");
     assert_eq!(runs["items"].as_array().unwrap().len(), 1);
     assert_eq!(runs["items"][0]["run_id"], run.to_string());
-    assert_eq!(runs["items"][0]["summary"], "private task");
-    assert_eq!(runs["items"][0]["is_owner"], true);
+    assert!(runs["items"][0]["summary"].is_null());
+    assert_eq!(runs["items"][0]["is_owner"], false);
     assert_eq!(runs["items"][0]["status"], "unknown");
     assert_eq!(runs["next_after"], json!(run));
-    let next = s.list_runs(&admin, run, 1).await.unwrap();
+    let next = s
+        .inspect_runs(&token, scope.workspace_id, run, 1)
+        .await
+        .unwrap();
     assert_eq!(
         next,
         json!({"scope":"workspace","next_after":null,"items":[{
-            "run_id":other_run,"owner_key_id":other_key.key_id,"is_owner":false,"can_read_trace":true,"summary":null,
+            "run_id":other_run,"owner_key_id":key.key_id,"is_owner":false,"can_read_trace":true,"summary":null,
             "created_at_ms":next["items"][0]["created_at_ms"],"status":"reported_failure"
         }]})
     );
-    let trace = s.run_trace(&admin, other_run, 0, 1).await.unwrap();
+    let trace = s
+        .inspect_run(&token, scope.workspace_id, other_run, 0, 1)
+        .await
+        .unwrap();
     assert_eq!(trace["is_owner"], false);
     assert_eq!(trace["run"]["summary"], "other private task");
     assert_eq!(
@@ -395,8 +397,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         "private report"
     );
     assert_eq!(trace["next_after"], 1);
-    assert!(s.run_prefix(&admin, other_run, 1).await.is_err());
-    assert!(s.run_trace(&reader, other_run, 0, 25).await.is_err());
+    assert!(s.run_prefix(&reader, other_run, 1).await.is_err());
     let outside = Scope {
         workspace_id: Uuid::new_v4(),
         ..scope
@@ -405,20 +406,14 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         .create_workspace(outside.tenant_id, outside.workspace_id, "Other workspace")
         .await
         .unwrap();
-    let outside_key = store.issue_key(outside, "admin").await.unwrap();
+    let outside_key = store.seed_workspace_key(outside).await.unwrap();
     let outside_admin = s.auth(&outside_key.token).await.unwrap();
     assert!(matches!(
         s.run_trace(&outside_admin, other_run, 0, 1).await,
         Err(origence::error::AppError::NotFound)
     ));
-    assert!(
-        s.list_runs(&reader, Uuid::nil(), 25).await.unwrap()["items"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
-    let rotated = crate::support::rotate_fixture_key(&s, &other, admin_key.key_id).await;
-    let rotated_auth = s.auth(rotated["token"].as_str().unwrap()).await.unwrap();
+    let rotated = store.rotate_workspace_key(scope).await.unwrap();
+    let rotated_auth = s.auth(&rotated.token).await.unwrap();
     assert_eq!(
         s.list_runs(&rotated_auth, Uuid::nil(), 25).await.unwrap()["items"][0]["run_id"],
         run.to_string()
@@ -432,7 +427,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         .create_workspace(separate.tenant_id, separate.workspace_id, "other workspace")
         .await
         .unwrap();
-    let outsider_key = store.issue_key(separate, "admin").await.unwrap();
+    let outsider_key = store.seed_workspace_key(separate).await.unwrap();
     let outsider = s.auth(&outsider_key.token).await.unwrap();
     assert_eq!(
         s.list_runs(&outsider, Uuid::nil(), 25).await.unwrap()["items"],
@@ -456,7 +451,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
             .await
             .is_err()
     );
-    assert!(s.list_runs(&other, Uuid::nil(), 101).await.is_err());
+    assert!(s.list_runs(&admin, Uuid::nil(), 101).await.is_err());
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -464,8 +459,11 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let http = reqwest::Client::new();
     let admin_list: Value = http
-        .get(format!("{base}/v1/runs?after={run}"))
-        .bearer_auth(rotated["token"].as_str().unwrap())
+        .get(format!(
+            "{base}/admin/deployment/workspaces/{}/runs?after={run}&limit=1",
+            scope.workspace_id
+        ))
+        .bearer_auth(&token)
         .send()
         .await
         .unwrap()
@@ -476,8 +474,11 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         .unwrap();
     assert_eq!(admin_list, next);
     let admin_trace: Value = http
-        .get(format!("{base}/v1/runs/{other_run}?limit=1"))
-        .bearer_auth(rotated["token"].as_str().unwrap())
+        .get(format!(
+            "{base}/admin/deployment/workspaces/{}/runs/{other_run}?limit=1",
+            scope.workspace_id
+        ))
+        .bearer_auth(&token)
         .send()
         .await
         .unwrap()
@@ -490,7 +491,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
     for path in ["/v1/assets?kind=knowledge&limit=1", "/v1/runs?limit=1"] {
         let result = http
             .get(format!("{base}{path}"))
-            .bearer_auth(&reader_key.token)
+            .bearer_auth(&rotated.token)
             .send()
             .await
             .unwrap();
@@ -573,7 +574,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
             ("memory_filter", &filter),
             ("limit", "1"),
         ])
-        .bearer_auth(&reader_key.token)
+        .bearer_auth(&rotated.token)
         .send()
         .await
         .unwrap();
@@ -590,7 +591,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         let response = http
             .get(format!("{base}/v1/assets"))
             .query(&[("kind", "memory"), ("memory_filter", &filter.to_string())])
-            .bearer_auth(&reader_key.token)
+            .bearer_auth(&rotated.token)
             .send()
             .await
             .unwrap();
@@ -609,7 +610,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
     );
     assert_eq!(
         http.get(format!("{base}/v1/assets?kind=memory&memory_filter=%7B%7D"))
-            .bearer_auth(&admin_key.token)
+            .bearer_auth(&key.token)
             .send()
             .await
             .unwrap()
@@ -620,7 +621,7 @@ async fn catalog_pages_preserve_visibility_ownership_and_rotation() {
         http.get(format!(
             "{base}/v1/assets?kind=knowledge&memory_filter=%7B%7D"
         ))
-        .bearer_auth(&reader_key.token)
+        .bearer_auth(&rotated.token)
         .send()
         .await
         .unwrap()
@@ -690,8 +691,17 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "reverse references")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
-    let other_key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
+    let other_key = store
+        .create_key_workspace(
+            Scope {
+                workspace_id: Uuid::new_v4(),
+                ..scope
+            },
+            "Isolated references",
+        )
+        .await
+        .unwrap();
     let a = s.auth(&key.token).await.unwrap();
     let other = s.auth(&other_key.token).await.unwrap();
     let receipt = s
@@ -771,16 +781,12 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
             .unwrap()
             .is_empty()
     );
-    assert!(
-        s.asset_runs(&other, asset, 1, Uuid::nil(), 25)
-            .await
-            .unwrap()["items"]
-            .as_array()
-            .unwrap()
-            .is_empty()
-    );
-    let rotated = crate::support::rotate_fixture_key(&s, &other, key.key_id).await;
-    let a = s.auth(rotated["token"].as_str().unwrap()).await.unwrap();
+    assert!(matches!(
+        s.asset_runs(&other, asset, 1, Uuid::nil(), 25).await,
+        Err(origence::error::AppError::NotFound)
+    ));
+    let rotated = store.rotate_workspace_key(scope).await.unwrap();
+    let a = s.auth(&rotated.token).await.unwrap();
     let mut after = Uuid::nil();
     let mut found = Vec::new();
     loop {
@@ -827,7 +833,7 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
         .create_workspace(separate.tenant_id, separate.workspace_id, "separate")
         .await
         .unwrap();
-    let outsider_key = store.issue_key(separate, "admin").await.unwrap();
+    let outsider_key = store.seed_workspace_key(separate).await.unwrap();
     let outsider = s.auth(&outsider_key.token).await.unwrap();
     assert!(
         s.asset_runs(&outsider, asset, 1, Uuid::nil(), 25)
@@ -837,7 +843,7 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
     s.engine.shutdown().await.unwrap();
     drop(s);
     let s = open_service(dir.path(), Models::disabled()).await.unwrap();
-    let a = s.auth(rotated["token"].as_str().unwrap()).await.unwrap();
+    let a = s.auth(rotated.token.as_str()).await.unwrap();
     assert_eq!(
         s.asset_runs(&a, asset, 1, Uuid::nil(), 25).await.unwrap()["items"]
             .as_array()
@@ -858,7 +864,7 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
     ] {
         assert!(
             http.get(format!("{base}/v1/assets/{asset}/runs{query}"))
-                .bearer_auth(rotated["token"].as_str().unwrap())
+                .bearer_auth(rotated.token.as_str())
                 .send()
                 .await
                 .unwrap()
@@ -868,7 +874,7 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
     }
     let response = http
         .get(format!("{base}/v1/assets/{asset}/runs?version=1&limit=1"))
-        .bearer_auth(rotated["token"].as_str().unwrap())
+        .bearer_auth(rotated.token.as_str())
         .send()
         .await
         .unwrap();
@@ -887,7 +893,7 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
     let event_id = Uuid::new_v4();
     let failed = http
         .post(format!("{base}/v1/runs/{}/context", runs[0]))
-        .bearer_auth(rotated["token"].as_str().unwrap())
+        .bearer_auth(rotated.token.as_str())
         .json(&json!({"event_id":event_id,"context":{"query":"Atlas","mode":"keyword"}}))
         .send()
         .await
@@ -914,7 +920,7 @@ async fn asset_run_references_are_exact_bounded_private_and_withdrawal_gated() {
         .unwrap();
     let prepared = http
         .post(format!("{base}/v1/runs/{}/context", runs[0]))
-        .bearer_auth(rotated["token"].as_str().unwrap())
+        .bearer_auth(rotated.token.as_str())
         .json(&json!({"event_id":event_id,"context":{"query":"Atlas","mode":"keyword"}}))
         .send()
         .await
@@ -953,11 +959,18 @@ async fn run_creation_overview_counts_owned_runs_in_half_open_windows() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "trends")
         .await
         .unwrap();
-    let owner = store.issue_key(scope, "writer").await.unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let owner = store.seed_workspace_key(scope).await.unwrap();
+    let outside = store
+        .create_key_workspace(
+            Scope {
+                workspace_id: Uuid::new_v4(),
+                ..scope
+            },
+            "No Runs",
+        )
+        .await
+        .unwrap();
     let owner_auth = service.auth(&owner.token).await.unwrap();
-    let admin_auth = service.auth(&admin.token).await.unwrap();
     let mut runs = Vec::new();
     for _ in 0..26 {
         let run = RunInput {
@@ -977,13 +990,10 @@ async fn run_creation_overview_counts_owned_runs_in_half_open_windows() {
             .await
             .unwrap();
         let key = store
-            .issue_key(
-                Scope {
-                    tenant_id: tenant,
-                    workspace_id: workspace,
-                },
-                "admin",
-            )
+            .seed_workspace_key(Scope {
+                tenant_id: tenant,
+                workspace_id: workspace,
+            })
             .await
             .unwrap();
         let auth = service.auth(&key.token).await.unwrap();
@@ -1098,20 +1108,15 @@ async fn run_creation_overview_counts_owned_runs_in_half_open_windows() {
         .await
         .unwrap();
 
-    let replacement = crate::support::rotate_fixture_key(&service, &admin_auth, owner.key_id).await;
+    let replacement = store.rotate_workspace_key(scope).await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let endpoint = format!("http://{}/v1/runs/overview", listener.local_addr().unwrap());
     let app = origence::api::router(service.clone());
     let host = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     let http = reqwest::Client::new();
     for (token, expected, scope) in [
-        (
-            replacement["token"].as_str().unwrap(),
-            26,
-            "current_logical_key",
-        ),
-        (&admin.token, 26, "workspace"),
-        (&reader.token, 0, "current_logical_key"),
+        (replacement.token.as_str(), 26, "current_logical_key"),
+        (outside.token.as_str(), 0, "current_logical_key"),
     ] {
         for (query, buckets) in [("", 24), ("?window=7d", 7)] {
             let value: Value = http
@@ -1141,10 +1146,22 @@ async fn run_creation_overview_counts_owned_runs_in_half_open_windows() {
     for (query, token, expected) in [
         ("", None, 401),
         ("", Some(owner.token.as_str()), 401),
-        ("?window=30d", Some(admin.token.as_str()), 422),
-        ("?tenant_id=forbidden", Some(admin.token.as_str()), 400),
-        ("?workspace_id=forbidden", Some(admin.token.as_str()), 400),
-        ("?owner_key_id=forbidden", Some(admin.token.as_str()), 400),
+        ("?window=30d", Some(replacement.token.as_str()), 422),
+        (
+            "?tenant_id=forbidden",
+            Some(replacement.token.as_str()),
+            400,
+        ),
+        (
+            "?workspace_id=forbidden",
+            Some(replacement.token.as_str()),
+            400,
+        ),
+        (
+            "?owner_key_id=forbidden",
+            Some(replacement.token.as_str()),
+            400,
+        ),
     ] {
         let mut request = http.get(format!("{endpoint}{query}"));
         if let Some(token) = token {

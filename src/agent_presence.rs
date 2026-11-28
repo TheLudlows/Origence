@@ -174,7 +174,7 @@ mod tests {
             id: Uuid::new_v4(),
             tenant_id: Uuid::new_v4(),
             workspace_id: Uuid::new_v4(),
-            role: "reader".into(),
+            role: "workspace".into(),
         };
         let first = presence.begin(&identity, Some(ClientKind::Codex)).unwrap();
         let parallel = presence.begin(&identity, None).unwrap();

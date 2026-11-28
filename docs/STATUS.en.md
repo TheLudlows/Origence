@@ -50,7 +50,7 @@ The default build includes the full host and embedded SDK. The cloud image disab
 
 The Claude Code and Codex plugins use Origence's `/mcp` endpoint for retrieval and other explicit tool calls without a local Origence executable. The server checks the key and workspace permissions on every request and uses the key's default workspace when none is specified. The two clients share a Node.js hook for automatic Run reporting and optional archiving. See [client setup](CLIENTS.en.md#direct-http-mcp) and [verification](VALIDATION.en.md).
 
-Workspace keys and membership-based workspace administrators can open **Agent connections** to see their workspace's in-flight MCP
+Workspace keys can open **Agent connections** to see their workspace's in-flight MCP
 requests and activity from the last five minutes, grouped by credential with
 the client kinds seen in handshakes. Observations are local to the serving
 process. See the [Agent connections API](API.en.md#agent-connections).
@@ -66,7 +66,7 @@ for Codex App Server command metadata and Claude Agent SDK cancellation.
 
 ## Workspace credentials
 
-Console administrator accounts use a separate deployment credential. Each workspace key is bound to its issuing workspace, and HTTP and MCP workspace parameters act as consistency checks. The remaining member key issuance, rotation, and revocation endpoints are confined to the issuing workspace. Sessions are scoped by workspace and logical key. See [identity and credential management](API.en.md#identity-and-credential-management).
+Console administrator accounts use a separate deployment credential. Each workspace key is bound to its issuing workspace, and HTTP and MCP workspace parameters act as consistency checks. Administrators rotate Keys in the selected workspace. Sessions are scoped by workspace and logical key. See [identity and credential management](API.en.md#identity-and-credential-management).
 
 ## AnySeek service credential and workspace collections
 

@@ -195,6 +195,6 @@ impl Service {
         let auth = self
             .authorize_deployment_workspace(token, workspace)
             .await?;
-        self.delete_target(&auth, key, source, "event", false).await
+        self.delete(&auth, key, source, "event").await
     }
 }

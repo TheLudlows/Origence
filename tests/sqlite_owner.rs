@@ -18,7 +18,7 @@ async fn provision(store: &SqliteStore) -> AuthorizedScope {
         tenant_id: tenant,
         workspace_id: workspace,
     };
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     store.authenticate(&key.token).await.unwrap()
 }
 

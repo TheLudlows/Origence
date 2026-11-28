@@ -167,11 +167,11 @@ SQLite is compiled into the program, so a separate SQLite service or client libr
 
 Avoid copying the databases separately while online or backing up only context.db. No online cross-database snapshot protocol is available. An older dedicated test database passed a full offline backup and restoration. Production backup/restore and power-loss tests still require separate acceptance. Logical deletion does not remove original text, which is also included in backups.
 
-## Common message batches and owning workspaces
+## Common message batches
 
-A root administrator explicitly grants access to an owning workspace. A root credential with the capability is intended for trusted services. Derived access is restricted to reader or writer. The caller chooses the target workspace through the public Rust API. See [API](API.en.md#common-owning-workspace-and-message-batch-library-apis) for interfaces, idempotency, and authorization.
+Callers use the Key for their workspace. The batch, its job, and retrieval remain scoped to that workspace. See the [Rust API](API.en.md#message-batch-rust-library-apis).
 
-Message batch submissions require an embedding profile that matches the accepted specification. Batches are indexed using vectors of the original text. The accepted specification is persisted with the job. Parsing and external calls stay outside storage transactions and the existing single Worker performs ingestion. Before rotating a credential, you can wait for its submitted jobs to finish. Revocation blocks publication by unfinished jobs under that credential.
+Message batch submissions require an embedding profile that matches the accepted specification. Batches are indexed using vectors of the original text. The accepted specification is persisted with the job. Parsing and external calls stay outside storage transactions and the existing single Worker performs ingestion. Accepted workspace jobs continue in their original workspace after Workspace Key rotation.
 
 Library callers specify an observation deadline via `wait_message_batch`. After the deadline, the Worker continues processing the durable job. The HTTP host no longer implements long waits for the old evaluation endpoint. Graceful shutdown still waits for the current Worker job and in-flight HTTP requests.
 
@@ -199,8 +199,7 @@ Run `origence.exe serve --local` to start the API and local AnySeek. To start th
 
 ## Private archive and paired recovery
 
-Private archive recovery requires paired SQLite and AnySeek backups. Direct deletion uses
-AnySeek group versions to fence delayed writes.
+Private archive recovery requires paired SQLite and AnySeek backups. Workspace and administrator APIs retain the archived turns.
 [AnySeek backup retention](#anyseek-full-text-and-vector-retrieval) · [Archive API](API.en.md#session-archiving-and-idempotent-feedback)
 
 1. Stop Origence and AnySeek, record both versions, and back up the complete Origence data directory.

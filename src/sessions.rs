@@ -73,7 +73,6 @@ impl Service {
         let turn = input.turn_id;
         let admission = self.engine.relational().archive_dependencies.lock().await;
         let mut tx = self.read(a, Permission::Write).await?;
-        let managed = tx.live_role_for_principal(a.id).await? == "workspace";
         let domain = tx.archive_domain(session).await?;
         let initialized = tx.native_archive_initialized(session).await?;
         tx.commit().await?;
@@ -132,37 +131,32 @@ impl Service {
         } else {
             record
         };
-        let mut tx = if managed {
-            self.write(a, Permission::Write).await?
-        } else {
-            self.read(a, Permission::Write).await?
-        };
+        let mut tx = self.write(a, Permission::Write).await?;
         require_native_record(&mut tx, &record).await?;
-        let mut response = json!({"session_id":session,"turn_id":turn,"source_event_id":record.source,"state":"archived"});
-        if managed {
-            let job = match tx.archive_extraction_job(record.source).await? {
-                Some(job) => job,
-                None => {
-                    // Record only metadata and immutable provenance. The worker
-                    // loads the existing native body outside this transaction.
-                    tx.attach_native_archive_proof(&record).await?;
-                    Self::enqueue(
-                        &mut tx,
-                        JobPayload::ArchiveExtract {
-                            archive_turn: turn,
-                            session_id: session,
-                            embedding_profile: self.models.profile.clone(),
-                        },
-                        None,
-                        Some(record.source),
-                    )
-                    .await?
-                }
-            };
-            response["memory_job_id"] = json!(job);
-        }
+        let job = match tx.archive_extraction_job(record.source).await? {
+            Some(job) => job,
+            None => {
+                // Record only metadata and immutable provenance. The worker
+                // loads the existing native body outside this transaction.
+                tx.attach_native_archive_proof(&record).await?;
+                Self::enqueue(
+                    &mut tx,
+                    JobPayload::ArchiveExtract {
+                        archive_turn: turn,
+                        session_id: session,
+                        embedding_profile: self.models.profile.clone(),
+                    },
+                    None,
+                    Some(record.source),
+                )
+                .await?
+            }
+        };
         tx.commit().await?;
-        Ok(response)
+        Ok(
+            json!({"session_id":session,"turn_id":turn,"source_event_id":record.source,
+            "state":"archived","memory_job_id":job}),
+        )
     }
 
     async fn archive_projection(
@@ -349,75 +343,6 @@ impl Service {
         Ok(
             json!({"session_id":session,"turns":turns,"next_after":next,"through_sequence":through_sequence.to_string()}),
         )
-    }
-
-    pub async fn withdraw_session_archive(
-        &self,
-        a: &AuthContext,
-        session: Uuid,
-        turn: Uuid,
-    ) -> Result<Value> {
-        session_id(session)?;
-        let mut tx = self.read(a, Permission::DeleteArchive).await?;
-        tx.archive_domain(session).await?;
-        if tx.archive_turn_sequence(session, turn).await?.is_none() {
-            return Err(AppError::NotFound);
-        }
-        tx.commit().await?;
-        self.delete_native_turn(a, session, turn).await?;
-        Ok(json!({"session_id":session,"turn_id":turn,"blocked":true}))
-    }
-
-    /// Process one bounded page. A failed request can be replayed with the same cursor.
-    pub async fn clear_session_archive(
-        &self,
-        a: &AuthContext,
-        session: Uuid,
-        after: i64,
-        through_sequence: i64,
-    ) -> Result<Value> {
-        session_id(session)?;
-        let mut tx = self.read(a, Permission::DeleteArchive).await?;
-        tx.archive_domain(session).await?;
-        if !(0..=through_sequence).contains(&after)
-            || through_sequence > tx.archive_last_sequence(session).await?
-        {
-            return Err(AppError::Invalid("invalid archive deletion range".into()));
-        }
-        let page = tx
-            .archive_delete_page(session, after, through_sequence)
-            .await?;
-        tx.commit().await?;
-        let next = page.last().map(|(sequence, _)| *sequence);
-        for (_, turn) in page {
-            let turn = Uuid::parse_str(&turn)
-                .map_err(|_| AppError::Unavailable("invalid archive command identity".into()))?;
-            self.delete_native_turn(a, session, turn).await?;
-        }
-        Ok(json!({
-            "session_id":session,"through_sequence":through_sequence.to_string(),
-            "next_after": next.filter(|sequence| *sequence < through_sequence).map(|sequence| sequence.to_string()),
-        }))
-    }
-
-    async fn delete_native_turn(&self, a: &AuthContext, session: Uuid, turn: Uuid) -> Result<()> {
-        // Serialize deletion with readers that install durable supporting evidence.
-        // Use the existing source retraction to make proofs unusable on interruption.
-        let _dependency_guard = self.engine.relational().archive_dependencies.lock().await;
-        let mut tx = self.write(a, Permission::DeleteArchive).await?;
-        let domain = tx.archive_domain(session).await?;
-        tx.retract_archive_support(session, turn).await?;
-        tx.commit().await?;
-        self.require_native_collection(domain, true).await?;
-        self.engine
-            .vector()
-            .private_archive()
-            .native_archive_delete(domain, session, turn)
-            .await?;
-        let mut tx = self.read(a, Permission::Write).await?;
-        tx.archive_domain(session).await?;
-        tx.commit().await?;
-        Ok(())
     }
 
     pub(crate) async fn context_session_candidates(

@@ -65,7 +65,6 @@ struct Fixture {
     scope: Scope,
     identity: MemoryIdentity,
     admin: IssuedKey,
-    reader: IssuedKey,
     asset: Uuid,
     old_chunk: Uuid,
     current_chunk: Uuid,
@@ -80,8 +79,7 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
         .create_workspace(scope.tenant_id, scope.workspace_id, "s0-vector")
         .await
         .unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let admin = store.seed_workspace_key(scope).await.unwrap();
     let auth = store.authenticate(&admin.token).await.unwrap();
     let mut fixture = Fixture {
         scope,
@@ -92,7 +90,6 @@ async fn seed(service: &Service, scope: Scope, profile: &str, decoys: usize) -> 
         }))
         .unwrap(),
         admin,
-        reader,
         asset: Uuid::nil(),
         old_chunk: Uuid::nil(),
         current_chunk: Uuid::nil(),
@@ -305,7 +302,7 @@ impl Host {
         self.call(
             Method::POST,
             "/v1/search",
-            &fixture.reader.token,
+            &fixture.admin.token,
             json!({"query": QUERY, "mode": mode, "limit": 100,
                 "allow_partial": false, "memory_identity": filter}),
             StatusCode::OK,
@@ -317,7 +314,7 @@ impl Host {
         self.call(
             Method::POST,
             "/v1/resolve",
-            &fixture.reader.token,
+            &fixture.admin.token,
             json!({"query": QUERY, "mode": mode, "budget_tokens": 4000,
                 "allow_partial": false, "memory_identity": fixture.identity}),
             StatusCode::OK,
@@ -393,7 +390,7 @@ async fn exercise(mode: &str) {
         .await;
         let store = service.engine.relational();
         let mut tx = store
-            .begin(store.authenticate(&primary.reader.token).await.unwrap())
+            .begin(store.authenticate(&primary.admin.token).await.unwrap())
             .await
             .unwrap();
         let ids = tx.vector_candidates(&profile, 3, 1, None).await.unwrap();
@@ -489,7 +486,7 @@ async fn exercise(mode: &str) {
     host.call(
         Method::POST,
         "/v1/search",
-        &primary.reader.token,
+        &primary.admin.token,
         json!({"query": QUERY, "mode": mode, "memory_identity": primary.identity}),
         StatusCode::SERVICE_UNAVAILABLE,
     )
@@ -498,7 +495,7 @@ async fn exercise(mode: &str) {
         .call(
             Method::POST,
             "/v1/search",
-            &primary.reader.token,
+            &primary.admin.token,
             json!({"query": QUERY, "mode": mode, "allow_partial": true,
             "memory_identity": primary.identity}),
             StatusCode::OK,
@@ -527,7 +524,7 @@ async fn exercise(mode: &str) {
         .call(
             Method::GET,
             &format!("/v1/assets/{}?version=1", primary.asset),
-            &primary.reader.token,
+            &primary.admin.token,
             Value::Null,
             StatusCode::OK,
         )

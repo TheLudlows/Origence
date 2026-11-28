@@ -1,6 +1,6 @@
 import { sessionsPage } from "./sessions.js";
 import { api, ApiError } from "./api.js";
-import { agentsPage, canInspectAgents } from "./agents.js";
+import { agentsPage } from "./agents.js";
 import { assetDetail, assetsPage } from "./assets.js";
 import { deploymentConsole } from "./deployment.js";
 import { globalKnowledgePage } from "./global-knowledge.js";
@@ -207,8 +207,6 @@ async function render() {
   const nav = el("nav");
   nav.setAttribute("aria-label", "主导航");
   for (const [key, label] of pages) {
-    if (key === "sessions" && user.role === "reader") continue;
-    if (key === "agents" && !canInspectAgents(user.role)) continue;
     const link = button(label, () => navigate(key), "nav-item");
     if (key === page) link.setAttribute("aria-current", "page");
     nav.append(link);
@@ -233,7 +231,7 @@ async function render() {
   workspaceList.setAttribute("aria-labelledby", workspaceHeading.id);
   workspaceList.append(el("li", "", el("span", "", user.name)));
   const content = el("main", "content");
-  const ctx: ViewContext = { signal: route.signal, role: user.role, navigate };
+  const ctx: ViewContext = { signal: route.signal, navigate };
   const activeWorkspace = user;
   mount.replaceChildren(
     el(
@@ -257,7 +255,6 @@ async function render() {
             "div",
             "account-identity",
             el("strong", "", session.account),
-            user.role === "workspace" ? null : el("small", "mono", user.role),
           ),
           button("退出", logout, "sidebar-exit"),
         ),

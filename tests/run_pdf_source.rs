@@ -19,9 +19,17 @@ async fn run_pdf_source_binds_exact_version_and_rechecks_access() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "synthetic PDF")
         .await
         .unwrap();
-    let owner = store.issue_key(scope, "admin").await.unwrap();
-    let other = store.issue_key(scope, "admin").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let owner = store.seed_workspace_key(scope).await.unwrap();
+    let other = store
+        .create_key_workspace(
+            Scope {
+                workspace_id: Uuid::new_v4(),
+                ..scope
+            },
+            "Other PDF workspace",
+        )
+        .await
+        .unwrap();
     let a = service.auth(&owner.token).await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -147,15 +155,6 @@ async fn run_pdf_source_binds_exact_version_and_rechecks_access() {
                 .unwrap()
                 .status(),
             StatusCode::NOT_FOUND
-        );
-        assert_eq!(
-            http.get(url)
-                .bearer_auth(&reader.token)
-                .send()
-                .await
-                .unwrap()
-                .status(),
-            StatusCode::FORBIDDEN
         );
     }
     let wrong = format!(

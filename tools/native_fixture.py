@@ -32,8 +32,8 @@ def run(env, fixture, **fields):
     )
 
 
-def workspace(env, name, same_tenant_as=None, *, single_key=False):
-    result = run(env, "member_workspace", name=name, same_tenant_as=same_tenant_as, single_key=single_key)
+def workspace(env, name, same_tenant_as=None):
+    result = run(env, "workspace", name=name, same_tenant_as=same_tenant_as)
     if result.returncode:
         raise RuntimeError("Could not seed synthetic workspaces through the Rust storage API")
     return json.loads(result.stdout)

@@ -69,7 +69,7 @@ async function preview(page, origin, token, date) {
     const modelOrigin = await listen(model);
     const apiOrigin = await listen(reservation);
     await new Promise((resolve) => reservation.close(resolve));
-    const writer = seedWorkspace(dir, "synthetic policy fixture", undefined, true);
+    const writer = seedWorkspace(dir, "synthetic policy fixture", undefined);
     host = spawn(bin, ["--data-dir", dir, "serve", "--local", "--bind", new URL(apiOrigin).host], {
       env: { ...process.env, OC_ENABLE_MODELS: "true", OC_EMBEDDING_MODEL: "", OC_EXTRACTION_BASE_URL: modelOrigin, OC_EXTRACTION_MODEL: "fixture", OC_MODEL_API_KEY: "fixture", RUST_LOG: "warn" },
       stdio: ["ignore", "ignore", "inherit"],

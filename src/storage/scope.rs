@@ -37,15 +37,13 @@ pub struct WorkspaceAccess {
 
 /// A permission a domain operation can require (A2.2 `check_current_permission`).
 ///
-/// Workspace credentials have full content access. Administrative operations
-/// and legacy archive deletion keep separate checks.
+/// Workspace keys and the deployment administrator can manage workspace content.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Permission {
     Read,
     Write,
     Delete,
     InspectAgents,
-    DeleteArchive,
 }
 
 impl Permission {
@@ -56,19 +54,12 @@ impl Permission {
             Self::Write => "write",
             Self::Delete => "delete",
             Self::InspectAgents => "inspect_agents",
-            Self::DeleteArchive => "delete_archive",
         }
     }
 
-    /// Whether `role` grants `self`. Mirrors the existing role matrix and is
-    /// shared by the in-memory contract double and future adapters.
+    /// Whether the verified identity permits this operation.
     pub fn granted_by(self, role: &str) -> bool {
-        match self {
-            Self::Read => matches!(role, "reader" | "writer" | "admin" | "workspace"),
-            Self::Write => matches!(role, "writer" | "admin" | "workspace"),
-            Self::Delete | Self::InspectAgents => matches!(role, "admin" | "workspace"),
-            Self::DeleteArchive => matches!(role, "writer" | "admin"),
-        }
+        matches!(role, "workspace" | "deployment_admin")
     }
 }
 

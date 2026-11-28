@@ -219,8 +219,17 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
         )
         .await
         .unwrap();
-    let owner = store.issue_key(scope, "admin").await.unwrap();
-    let reviewer = store.issue_key(scope, "writer").await.unwrap();
+    let owner = store.seed_workspace_key(scope).await.unwrap();
+    let reviewer = store
+        .create_key_workspace(
+            Scope {
+                workspace_id: Uuid::new_v4(),
+                ..scope
+            },
+            "Other verification workspace",
+        )
+        .await
+        .unwrap();
     let a = service.auth(&owner.token).await.unwrap();
     let first = service
         .knowledge(

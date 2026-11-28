@@ -1179,9 +1179,8 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "candidate-filter")
         .await
         .unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
-    let reader_auth = service.auth(&reader.token).await.unwrap();
+    let admin = store.seed_workspace_key(scope).await.unwrap();
+    let reader_auth = service.auth(&admin.token).await.unwrap();
     let identity: origence::memory_identity::MemoryIdentity = serde_json::from_value(json!({
         "subject": {"kind": "service", "stable_id": "target"},
         "predicate": "release.approval",
@@ -1385,7 +1384,7 @@ async fn identity_filter_survives_top_100_distractors_and_stale_versions() {
         .create_workspace(other_scope.tenant_id, other_scope.workspace_id, "other")
         .await
         .unwrap();
-    let other_key = store.issue_key(other_scope, "reader").await.unwrap();
+    let other_key = store.seed_workspace_key(other_scope).await.unwrap();
     let other_auth = service.auth(&other_key.token).await.unwrap();
     assert_eq!(
         service
@@ -1426,11 +1425,10 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "local")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let a = s.auth(&key.token).await.unwrap();
 
-    let writer_key = store.issue_key(scope, "writer").await.unwrap();
-    let writer = s.auth(&writer_key.token).await.unwrap();
+    let writer = a.clone();
     let proposal = s
         .memory(
             &writer,
@@ -1445,7 +1443,16 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         .unwrap();
     assert!(proposal["job_id"].is_string());
     assert_eq!(proposal["state"], "accepted");
-    let reader_key = store.issue_key(scope, "reader").await.unwrap();
+    let reader_key = store
+        .create_key_workspace(
+            Scope {
+                workspace_id: Uuid::new_v4(),
+                ..scope
+            },
+            "Isolated jobs",
+        )
+        .await
+        .unwrap();
     let reader = s.auth(&reader_key.token).await.unwrap();
     // Job state can expose unpublished input, so it stays behind write permission.
     assert!(s.job(&reader, id(&proposal, "job_id")).await.is_err());
@@ -1522,11 +1529,7 @@ async fn local_transactions_versions_retraction_and_idempotency() {
         s.get(&a, id(&first, "asset_id"), None).await.unwrap()["version"],
         2
     );
-    let restore_key = crate::support::seed_member_key(&s, &a, "writer").await;
-    let restore_writer = s
-        .auth(restore_key["token"].as_str().unwrap())
-        .await
-        .unwrap();
+    let restore_writer = a.clone();
     let restored = s
         .restore(
             &restore_writer,
@@ -1591,7 +1594,7 @@ async fn racing_expected_versions_supersede_the_loser() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "local")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "writer").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let a = s.auth(&key.token).await.unwrap();
     let input = MemoryInput {
         fact_key: "racer".into(),
@@ -1661,7 +1664,7 @@ async fn malformed_durable_jobs_settle_and_leave_the_worker_available() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "malformed jobs")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let a = s.auth(&key.token).await.unwrap();
     let cases = [
         (
@@ -1781,7 +1784,7 @@ async fn saved_publication_checks_generation_before_decoding() {
         )
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let a = s.auth(&key.token).await.unwrap();
     for (case, publication, state) in [
         (
@@ -1863,7 +1866,7 @@ async fn saved_publication_recovers_after_external_anyseek_graph_write() {
     let key = s
         .engine
         .relational()
-        .issue_key(scope, "admin")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     let a = s.auth(&key.token).await.unwrap();
@@ -2176,8 +2179,7 @@ async fn host_search_crosses_authority_batch_boundaries_after_reopen() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "offline-batch")
         .await
         .unwrap();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
+    let admin = store.seed_workspace_key(scope).await.unwrap();
     // Initialize the workspace through the public publication path before
     // injecting the large authority fixture; this also pins the analysis binding.
     let auth = service.auth(&admin.token).await.unwrap();
@@ -2278,7 +2280,7 @@ async fn host_search_crosses_authority_batch_boundaries_after_reopen() {
     let response = post(
         &reqwest::Client::new(),
         &base,
-        &reader.token,
+        &admin.token,
         "/v1/search",
         json!({"query":"approval","mode":"keyword","limit":100}),
     )

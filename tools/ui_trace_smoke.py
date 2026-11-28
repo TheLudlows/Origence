@@ -113,8 +113,8 @@ def main():
         project = root / "project"
         project.mkdir()
         env = isolated_env(temporary)
-        workspace = seed_workspace(env, "Synthetic trace acceptance", single_key=True)
-        other = seed_workspace(env, "Isolated trace workspace", workspace["workspace_id"], single_key=True)
+        workspace = seed_workspace(env, "Synthetic trace acceptance")
+        other = seed_workspace(env, "Isolated trace workspace", workspace["workspace_id"])
         owner = workspace["token"]
         forbidden = [owner, other["token"]]
         with Host(str(binary), env, owner, forbidden, serve_args=("--local",)) as host:

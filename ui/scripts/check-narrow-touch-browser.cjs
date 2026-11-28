@@ -25,7 +25,7 @@ const upstream = createServer(async (req, res) => {
   };
   if (req.headers.authorization !== `Bearer ${token}`) return send({}, 401);
   if (req.url === "/v1/whoami")
-    return send({ id: assetId, workspace_id: assetId, role: "writer" });
+    return send({ id: assetId, workspace_id: assetId, role: "workspace" });
   if (req.url === "/v1/assets?kind=knowledge&limit=25")
     return send({ items: [], next_after: null });
   if (req.method === "POST" && req.url === "/v1/context") {

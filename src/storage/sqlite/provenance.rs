@@ -82,20 +82,7 @@ impl SqliteTx {
         self.file_exists(id).await
     }
 
-    #[cfg(feature = "host")]
-    pub(crate) async fn retract_content_source(&mut self, id: Uuid) -> StorageResult<u64> {
-        self.retract_event_in_scope(id, false).await
-    }
-
     pub(super) async fn retract_event_inner(&mut self, id: Uuid) -> StorageResult<u64> {
-        self.retract_event_in_scope(id, true).await
-    }
-
-    async fn retract_event_in_scope(
-        &mut self,
-        id: Uuid,
-        include_archive: bool,
-    ) -> StorageResult<u64> {
         self.require_private_source(id).await?;
         let kind: Option<String> = sqlite_db::query_scalar(
             "SELECT kind FROM oc_events WHERE tenant_id=? AND workspace_id=? AND id=?",
@@ -107,10 +94,7 @@ impl SqliteTx {
         .await
         .map_err(sqlite_err)?;
         if kind.as_deref() == Some("session_turn") {
-            if !include_archive {
-                return Err(StorageError::Forbidden);
-            }
-            self.check_permission(Permission::DeleteArchive).await?;
+            return Err(StorageError::Forbidden);
         }
         sqlite_db::query(
             "UPDATE oc_events SET state = 'retracted' WHERE tenant_id = ? AND workspace_id = ? AND id = ?",

@@ -38,11 +38,11 @@ export function citation(
     );
   }
   const source = el("div");
-  const textSource = !pdf && ref.source_event_id && ctx.role !== "reader"
+  const textSource = !pdf && ref.source_event_id
     ? sourcePreviewTarget()
     : null;
   const pdfPath = pdf?.path;
-  const openPdf = pdfPath && ctx.role !== "reader"
+  const openPdf = pdfPath
     ? button("核验 PDF 页内引用", async () => {
         if (!openPdf) return;
         openPdf.disabled = true;
@@ -377,7 +377,7 @@ function fixedPrefix(runId: string, sequence: number, signal: AbortSignal) {
 
 async function trace(root: HTMLElement, id: string, ctx: ViewContext) {
   const events: RunEvent[] = [];
-  const drafting = ["writer", "admin", "workspace"].includes(ctx.role) ? runSkillDrafting(id, ctx) : null;
+  const drafting = runSkillDrafting(id, ctx);
   const assessments = el("div");
   const verificationSection = panel("外部核验记录", assessments);
   verificationSection.hidden = true;

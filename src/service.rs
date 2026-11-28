@@ -703,60 +703,18 @@ impl Service {
         if !["asset", "event", "file"].contains(&target) {
             return Err(AppError::Invalid("invalid deletion target".into()));
         }
-        self.delete_target(a, key, id, target, true).await
-    }
-
-    async fn delete_target(
-        &self,
-        a: &AuthContext,
-        key: &str,
-        id: Uuid,
-        target: &str,
-        include_archive: bool,
-    ) -> Result<Value> {
         let operation = format!("delete/{target}/{id}");
         let (mut tx, cached) = self
             .command(a, Permission::Delete, &operation, key, &json!({}))
             .await?;
         if let Some(receipt) = cached {
-            if let Some(address) = receipt.get("archive") {
-                let (session, turn): (Uuid, Uuid) = decode(address.clone())?;
-                tx.commit().await?;
-                self.withdraw_session_archive(a, session, turn).await?;
-                return Ok(json!({"id":id,"blocked":true}));
-            }
             return Ok(receipt);
         }
-        if target == "event" && include_archive {
-            let address = tx.native_archive_turn_for_source(id).await?;
-            if address.is_some() || !tx.event_exists(id).await? {
-                tx.rollback().await?;
-                let (session, turn) = match address {
-                    Some(address) => address,
-                    None => {
-                        let record = self
-                            .load_native_archive_source(a, id)
-                            .await?
-                            .ok_or(AppError::NotFound)?;
-                        (record.session, record.turn)
-                    }
-                };
-                let (mut tx, cached) = self
-                    .command(a, Permission::Delete, &operation, key, &json!({}))
-                    .await?;
-                tx.check_permission(Permission::DeleteArchive).await?;
-                if cached.is_none() {
-                    Self::finish(tx, json!({"archive":[session,turn]})).await?;
-                } else {
-                    tx.commit().await?;
-                }
-                self.withdraw_session_archive(a, session, turn).await?;
-                return Ok(json!({"id":id,"blocked":true}));
-            }
+        if target == "event" && tx.native_archive_turn_for_source(id).await?.is_some() {
+            return Err(AppError::Forbidden);
         }
         let changed = match target {
             "asset" => tx.delete_asset(id).await?,
-            "event" if !include_archive => tx.retract_content_source(id).await?,
             "event" => tx.retract_event(id).await?,
             _ => tx.delete_file(id).await?,
         };

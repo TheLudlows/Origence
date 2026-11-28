@@ -17,16 +17,14 @@ const comparisonFailure = "合成故障：历史正文暂不可读";
 const comparisonDone = (from, to) => `正文比较完成，v${from} 到 v${to}。`;
 const held = new Map();
 const upstream = createServer((req, res) => {
-  const role = req.headers.authorization?.slice("Bearer synthetic-".length);
   const path = req.url;
   const send = (body, status = 200) => {
     if (res.destroyed) return;
     res.writeHead(status, { "Content-Type": "application/json" });
     res.end(JSON.stringify(body));
   };
-  if (path === "/v1/whoami") return send({ id: assetId, workspace_id: sourceId, role });
+  if (path === "/v1/whoami") return send({ id: assetId, workspace_id: sourceId, role: "workspace" });
   if (path === sourcePath) {
-    if (role !== "writer") return send({ error: { message: "原始来源无权读取" } }, 403);
     return deliver({ content: original });
   }
   if (path === versionPath(5)) return deliver({ error: { message: comparisonFailure } }, 503);
@@ -118,7 +116,7 @@ const requestCancelled = (page, path) => page.waitForEvent("requestfailed", {
   predicate: (request) => request.url().endsWith(`/api${path}`),
 });
 
-async function writerChecks(page, sourceRequests, measurements) {
+async function workspaceChecks(page, sourceRequests, measurements) {
   const tablist = page.getByRole("tablist", { name: "内容与来源" });
   const body = tablist.getByRole("tab", { name: "正文" });
   const source = tablist.getByRole("tab", { name: "原始来源" });
@@ -248,20 +246,6 @@ async function writerChecks(page, sourceRequests, measurements) {
   assert.equal(sourceRequests.length, 3);
 }
 
-async function readerChecks(page, sourceRequests) {
-  assert.equal(await page.getByRole("tablist").count(), 0);
-  assert.equal(await page.getByRole("button", { name: "原始来源" }).count(), 0);
-  await page.getByRole("button", { name: "读取版本" }).focus();
-  await page.keyboard.press("Tab");
-  await focusIs(page.getByLabel("对比版本"));
-  await page.keyboard.press("Tab");
-  await page.keyboard.press("Enter");
-  await page.getByText(/v2 → v3/).waitFor();
-  assert.equal(await comparisonSection(page).getByRole("status").textContent(), comparisonDone(2, 3));
-  assert.equal(await page.getByText(contents[3], { exact: true }).count(), 2);
-  assert.equal(sourceRequests.length, 0);
-}
-
 async function feedbackChecks(page, displayedVersion, measurements) {
   const comparison = comparisonSection(page);
   const status = comparison.getByRole("status");
@@ -330,32 +314,28 @@ async function feedbackChecks(page, displayedVersion, measurements) {
   const { createUiServer } = await import("../dist/server.js");
   let relay, browser;
   try {
-    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts(sourceId, ["synthetic-reader", "synthetic-writer"]) });
+    relay = createFixtureUiServer(createUiServer, { apiBaseUrl: await listen(upstream), accounts: fixtureAccounts(sourceId, ["synthetic-workspace"]) });
     const origin = await listen(relay);
     browser = await chromium.launch({ executablePath: process.env.CHROMIUM });
     for (const width of [1024, 736, 375, 320]) {
       for (const colorScheme of ["light", "dark"]) {
-        for (const role of ["writer", "reader"]) {
-          const page = await browser.newPage({ viewport: { width, height: 768 }, colorScheme });
-          page.setDefaultTimeout(4_000);
-          const sourceRequests = [];
-          page.on("request", (request) => {
-            if (request.url().endsWith(`/api${sourcePath}`)) sourceRequests.push(request);
-          });
-          await page.goto(`${origin}/#asset/${assetId}?version=3`);
-          await fixtureSignIn(page, `synthetic-${role}`);
-          await page.getByRole("heading", { name: "合成文档 v3" }).waitFor();
-          await page.getByText(contents[3], { exact: true }).waitFor();
-          const measurements = {};
-          await checkContrast(measurements, "versionBadge", page.getByText("confirmed", { exact: true }));
-          if (role === "writer") await writerChecks(page, sourceRequests, measurements);
-          else await readerChecks(page, sourceRequests);
-          await feedbackChecks(page, role === "writer" ? 4 : 3, measurements);
-          if (role === "reader") assert.equal(sourceRequests.length, 0);
-          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth), true);
-          await page.close();
-          console.log(`PASS ${width}px ${colorScheme} ${role} contrast ${JSON.stringify(measurements)}`);
-        }
+        const page = await browser.newPage({ viewport: { width, height: 768 }, colorScheme });
+        page.setDefaultTimeout(4_000);
+        const sourceRequests = [];
+        page.on("request", (request) => {
+          if (request.url().endsWith(`/api${sourcePath}`)) sourceRequests.push(request);
+        });
+        await page.goto(`${origin}/#asset/${assetId}?version=3`);
+        await fixtureSignIn(page, "synthetic-workspace");
+        await page.getByRole("heading", { name: "合成文档 v3" }).waitFor();
+        await page.getByText(contents[3], { exact: true }).waitFor();
+        const measurements = {};
+        await checkContrast(measurements, "versionBadge", page.getByText("confirmed", { exact: true }));
+        await workspaceChecks(page, sourceRequests, measurements);
+        await feedbackChecks(page, 4, measurements);
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth === innerWidth), true);
+        await page.close();
+        console.log(`PASS ${width}px ${colorScheme} contrast ${JSON.stringify(measurements)}`);
       }
     }
   } finally {

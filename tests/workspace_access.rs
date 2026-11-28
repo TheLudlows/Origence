@@ -848,13 +848,6 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
         )
         .await
         .unwrap();
-    assert!(matches!(
-        service
-            .withdraw_session_archive(&auth, session_id, turn)
-            .await,
-        Err(AppError::Forbidden)
-    ));
-
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let client = HostClient::new(&base, key.token.clone()).unwrap();
@@ -895,17 +888,25 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
             "{path}",
         );
     }
-    for path in [
-        format!("/v1/sessions/{session_id}/turns/{turn}"),
-        format!("/v1/sessions/{session_id}?through_sequence=1"),
-        format!("/v1/events/{source}"),
+    for (path, expected) in [
+        (format!("/v1/sessions/{session_id}"), StatusCode::NOT_FOUND),
+        (
+            format!("/v1/sessions/{session_id}/turns/{turn}"),
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
+        (format!("/v1/events/{source}"), StatusCode::FORBIDDEN),
     ] {
-        assert!(matches!(
-            client
-                .call(Method::DELETE, &path, None, Some("delete-turn"))
-                .await,
-            Err(AppError::Forbidden)
-        ));
+        assert_eq!(
+            http.delete(format!("{base}{path}"))
+                .bearer_auth(&key.token)
+                .header("Idempotency-Key", "delete-turn")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            expected,
+            "{path}"
+        );
     }
     assert_eq!(
         client

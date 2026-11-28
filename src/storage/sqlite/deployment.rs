@@ -152,7 +152,7 @@ impl SqliteStore {
         let auth = AuthorizedScope {
             scope: tx.scope,
             principal_id: tx.principal_id,
-            role: "admin".into(),
+            role: "deployment_admin".into(),
         };
         tx.commit().await?;
         Ok(auth)
@@ -246,7 +246,7 @@ impl SqliteStore {
         let mut tx = self.begin_deployment_inspection(token, workspace).await?;
         let row: Option<(Uuid, i64)> = sqlite_db::query_as(
             "SELECT id,created_at FROM oc_api_keys
-             WHERE tenant_id=? AND workspace_id=? AND role='workspace' AND NOT revoked",
+             WHERE tenant_id=? AND workspace_id=? AND NOT revoked",
         )
         .bind(tx.scope.tenant_id)
         .bind(tx.scope.workspace_id)

@@ -102,20 +102,9 @@ async fn agent_list_keeps_mcp_activity_within_its_workspace() {
     let selected = workspace(&service, scope.tenant_id).await;
     let other = workspace(&service, Uuid::new_v4()).await;
     let store = service.engine.relational();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
-    let selected_admin = store.issue_key(selected, "admin").await.unwrap();
-    let other_admin = store.issue_key(other, "admin").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
-    let writer = store.issue_key(scope, "writer").await.unwrap();
-    let invalid = store.issue_key(scope, "reader").await.unwrap();
-    let key_scope = Scope {
-        workspace_id: Uuid::new_v4(),
-        ..scope
-    };
-    let workspace_key = store
-        .create_key_workspace(key_scope, "Single Key agent fixture")
-        .await
-        .unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
+    let selected_key = store.seed_workspace_key(selected).await.unwrap();
+    let other_key = store.seed_workspace_key(other).await.unwrap();
 
     let peer = Peer::start(service.clone(), McpHttpConfig::default()).await;
     let endpoint = peer.url.replace("/mcp", "/admin/agents");
@@ -131,11 +120,7 @@ async fn agent_list_keeps_mcp_activity_within_its_workspace() {
         StatusCode::UNAUTHORIZED
     );
     assert_eq!(
-        list(&reader.token).await.unwrap().status(),
-        StatusCode::FORBIDDEN
-    );
-    assert_eq!(
-        initialize(&invalid.token, "codex")
+        initialize(&key.token, "codex")
             .header("Origin", "http://untrusted.example")
             .send()
             .await
@@ -144,7 +129,7 @@ async fn agent_list_keeps_mcp_activity_within_its_workspace() {
         StatusCode::FORBIDDEN
     );
     assert_eq!(
-        initialize(&invalid.token, "codex")
+        initialize(&key.token, "codex")
             .header("X-Origence-Workspace", other.workspace_id.to_string())
             .send()
             .await
@@ -153,7 +138,7 @@ async fn agent_list_keeps_mcp_activity_within_its_workspace() {
         StatusCode::FORBIDDEN
     );
     assert_eq!(
-        list(&admin.token)
+        list(&key.token)
             .await
             .unwrap()
             .json::<Value>()
@@ -163,47 +148,15 @@ async fn agent_list_keeps_mcp_activity_within_its_workspace() {
     );
 
     for name in ["codex-mcp-client", "claude-code", "codex-mcp-client"] {
-        let response = initialize(&writer.token, name).send().await.unwrap();
+        let response = initialize(&key.token, name).send().await.unwrap();
         assert!(response.headers().get("mcp-session-id").is_none());
         assert_eq!(
             response.json::<Value>().await.unwrap()["result"]["protocolVersion"],
             PROTOCOL
         );
     }
-    assert_eq!(
-        initialize(&workspace_key.token, "codex")
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::OK
-    );
-    let workspace_activity = list(&workspace_key.token)
-        .await
-        .unwrap()
-        .json::<Value>()
-        .await
-        .unwrap();
-    assert_eq!(
-        workspace_activity["workspace_id"],
-        json!(key_scope.workspace_id)
-    );
-    let observations = workspace_activity["items"].as_array().unwrap();
-    assert_eq!(observations.len(), 1);
-    assert_eq!(observations[0]["role"], "workspace");
-    assert_eq!(
-        peer.client
-            .get(&endpoint)
-            .bearer_auth(&workspace_key.token)
-            .header("X-Origence-Workspace", scope.workspace_id.to_string())
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::FORBIDDEN
-    );
     assert!(
-        initialize(&reader.token, "private label fixture")
+        initialize(&key.token, "private label fixture")
             .send()
             .await
             .unwrap()
@@ -219,100 +172,69 @@ async fn agent_list_keeps_mcp_activity_within_its_workspace() {
                 "name":"context_session","arguments":{}
             }),
         ))
-        .bearer_auth(&writer.token)
+        .bearer_auth(&key.token)
         .header("X-Origence-Workspace", selected.workspace_id.to_string())
         .send()
         .await
         .unwrap();
     assert_eq!(denied.status(), StatusCode::FORBIDDEN);
-    let response = list(&admin.token).await.unwrap();
+    let response = list(&key.token).await.unwrap();
     assert_eq!(response.headers()["Cache-Control"], "no-store");
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["workspace_id"], json!(scope.workspace_id));
     assert_eq!(body["window_seconds"], 300);
     let rows = body["items"].as_array().unwrap();
-    assert_eq!(rows.len(), 2);
-    let writer_row = rows
-        .iter()
-        .find(|r| r["observation"]["credential_id"] == json!(writer.key_id))
-        .unwrap();
-    assert_eq!(writer_row["role"], "writer");
-    assert_eq!(writer_row["observation"]["active_requests"], 0);
-    assert!(
-        writer_row["observation"]["last_seen_at_ms"]
-            .as_i64()
-            .unwrap()
-            > 0
-    );
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["role"], "workspace");
+    assert_eq!(rows[0]["observation"]["credential_id"], json!(key.key_id));
+    assert_eq!(rows[0]["observation"]["active_requests"], 0);
+    assert!(rows[0]["observation"]["last_seen_at_ms"].as_i64().unwrap() > 0);
     assert_eq!(
-        writer_row["observation"]["client_kinds"],
-        json!(["codex", "claude_code"])
+        rows[0]["observation"]["client_kinds"],
+        json!(["codex", "claude_code", "other"])
     );
-    let reader_row = rows
-        .iter()
-        .find(|r| r["observation"]["credential_id"] == json!(reader.key_id))
-        .unwrap();
-    assert_eq!(reader_row["observation"]["client_kinds"], json!(["other"]));
     for private in [
-        &writer.token,
-        &reader.token,
+        key.token.as_str(),
         "private label fixture",
         "private title fixture",
         "private version fixture",
     ] {
         assert!(!body.to_string().contains(private));
     }
-
-    for key in [&selected_admin, &other_admin] {
-        assert_eq!(
-            list(&key.token)
-                .await
-                .unwrap()
-                .json::<Value>()
-                .await
-                .unwrap()["items"],
-            json!([])
-        );
+    for key in [&selected_key, &other_key] {
+        let body: Value = list(&key.token).await.unwrap().json().await.unwrap();
+        assert_eq!(body["items"], json!([]));
     }
-
-    let admin_auth = service.auth(&admin.token).await.unwrap();
-    let replacement =
-        crate::support::rotate_fixture_key(&service, &admin_auth, writer.key_id).await;
-    let body: Value = list(&admin.token).await.unwrap().json().await.unwrap();
-    assert_eq!(body["items"].as_array().unwrap().len(), 1);
+    let next = store.rotate_workspace_key(scope).await.unwrap();
     assert_eq!(
-        body["items"][0]["observation"]["credential_id"],
-        json!(reader.key_id)
+        list(&key.token).await.unwrap().status(),
+        StatusCode::UNAUTHORIZED
     );
-    let replacement_token = replacement["token"].as_str().unwrap();
-    assert!(
-        initialize(replacement_token, "codex")
+    let body: Value = list(&next.token).await.unwrap().json().await.unwrap();
+    assert_eq!(body["items"], json!([]));
+    assert_eq!(
+        initialize(&next.token, "codex")
             .send()
             .await
             .unwrap()
-            .json::<Value>()
-            .await
-            .unwrap()["result"]
-            .is_object()
+            .status(),
+        StatusCode::OK
     );
-    let body: Value = list(&admin.token).await.unwrap().json().await.unwrap();
-    assert_eq!(body["items"].as_array().unwrap().len(), 2);
-    assert!(
-        body["items"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|r| r["observation"]["credential_id"] == replacement["key_id"])
+    let body: Value = list(&next.token).await.unwrap().json().await.unwrap();
+    assert_eq!(body["items"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        body["items"][0]["observation"]["credential_id"],
+        json!(next.key_id)
     );
     let restarted = Peer::start(service.clone(), McpHttpConfig::default()).await;
-    let response = restarted
+    let response: Value = restarted
         .client
         .get(restarted.url.replace("/mcp", "/admin/agents"))
-        .bearer_auth(&admin.token)
+        .bearer_auth(&next.token)
         .send()
         .await
         .unwrap()
-        .json::<Value>()
+        .json()
         .await
         .unwrap();
     assert_eq!(response["items"], json!([]));
@@ -329,7 +251,7 @@ async fn streamable_http_negotiates_and_checks_auth_host_origin_method_and_size(
     let key = service
         .engine
         .relational()
-        .issue_key(scope, "reader")
+        .seed_workspace_key(scope)
         .await
         .unwrap();
     let peer = Peer::start(
@@ -469,10 +391,8 @@ async fn memory_tools_use_workspace_permissions_and_publish_cited_conclusions() 
     let scope = workspace(&service, Uuid::new_v4()).await;
     let other = workspace(&service, scope.tenant_id).await;
     let store = service.engine.relational();
-    let admin = store.issue_key(scope, "admin").await.unwrap();
-    let writer = store.issue_key(scope, "writer").await.unwrap();
-    let reader = store.issue_key(scope, "reader").await.unwrap();
-    let other_reader = store.issue_key(other, "reader").await.unwrap();
+    let admin = store.seed_workspace_key(scope).await.unwrap();
+    let other_reader = store.seed_workspace_key(other).await.unwrap();
     service
         .register_memory_property(
             &service.auth(&admin.token).await.unwrap(),
@@ -487,18 +407,13 @@ async fn memory_tools_use_workspace_permissions_and_publish_cited_conclusions() 
 
     let peer = Peer::start(service.clone(), McpHttpConfig::default()).await;
     let input = json!({"idempotency_key":"mcp-retain-fixture","content":content});
-    let error = peer
-        .call(&reader.token, None, "context_memory_retain", input.clone())
-        .await
-        .unwrap_err();
-    assert!(error["message"].as_str().unwrap().starts_with("FORBIDDEN:"));
     let receipt = peer
-        .call(&writer.token, None, "context_memory_retain", input.clone())
+        .call(&admin.token, None, "context_memory_retain", input.clone())
         .await
         .unwrap();
     assert_eq!(receipt["state"], "accepted");
     assert_eq!(
-        peer.call(&writer.token, None, "context_memory_retain", input)
+        peer.call(&admin.token, None, "context_memory_retain", input)
             .await
             .unwrap(),
         receipt
@@ -507,7 +422,7 @@ async fn memory_tools_use_workspace_permissions_and_publish_cited_conclusions() 
 
     let recall = json!({"identity":identity});
     let result = peer
-        .call(&reader.token, None, "context_memory_recall", recall.clone())
+        .call(&admin.token, None, "context_memory_recall", recall.clone())
         .await
         .unwrap();
     assert_eq!(result["version"], 1);
@@ -533,15 +448,13 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
     let a = workspace(&service, Uuid::new_v4()).await;
     let b = workspace(&service, a.tenant_id).await;
     let store = service.engine.relational();
-    let writer = store.issue_key(a, "writer").await.unwrap();
-    let a_admin = store.issue_key(a, "admin").await.unwrap();
-    let reader = store.issue_key(a, "reader").await.unwrap();
+    let writer = store.seed_workspace_key(a).await.unwrap();
+    let other = store.seed_workspace_key(b).await.unwrap();
     let peer = Peer::start(service.clone(), McpHttpConfig::default()).await;
     let auth = service.auth(&writer.token).await.unwrap();
-    let admin_auth = service.auth(&a_admin.token).await.unwrap();
     let receipt = service
         .knowledge(
-            &admin_auth,
+            &auth,
             "mcp-http-fixture",
             serde_json::from_value(
                 json!({"title":"Atlas", "content":"Atlas evidence", "format":"text"}),
@@ -602,7 +515,7 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
 
     let hits = peer
         .call(
-            &reader.token,
+            &writer.token,
             None,
             "context_search",
             json!({"query":"Atlas","mode":"keyword"}),
@@ -612,7 +525,7 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
     assert_eq!(hits["hits"][0]["asset_id"], *asset);
     assert_eq!(
         peer.call(
-            &reader.token,
+            &writer.token,
             None,
             "context_get",
             json!({"asset_id":asset,"version":1})
@@ -682,10 +595,7 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
         error["error"]["message"],
         format!("INVALID_ARGUMENT: {message}")
     );
-    for (key, status, code) in [
-        (&reader.token, StatusCode::FORBIDDEN, "FORBIDDEN"),
-        (&a_admin.token, StatusCode::NOT_FOUND, "NOT_FOUND"),
-    ] {
+    for (key, status, code) in [(&other.token, StatusCode::NOT_FOUND, "NOT_FOUND")] {
         assert_eq!(http_prepare(key).send().await.unwrap().status(), status);
         let denied: Value = mcp_prepare(key).send().await.unwrap().json().await.unwrap();
         assert!(
@@ -723,14 +633,9 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
         .unwrap();
     assert_eq!(replay, prepare);
     assert!(
-        peer.call(
-            &reader.token,
-            None,
-            "context_run_get",
-            json!({"run_id":run})
-        )
-        .await
-        .is_err()
+        peer.call(&other.token, None, "context_run_get", json!({"run_id":run}))
+            .await
+            .is_err()
     );
 
     let turn = Uuid::new_v4();
@@ -761,7 +666,7 @@ async fn streamable_http_reuses_scoped_tools_and_rechecks_live_credentials() {
         .await
         .is_err()
     );
-    store.revoke_key(writer.key_id).await.unwrap();
+    store.rotate_workspace_key(a).await.unwrap();
     assert_eq!(
         peer.post(rpc("tools/list", json!({})))
             .bearer_auth(token)

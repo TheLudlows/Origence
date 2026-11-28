@@ -2002,7 +2002,7 @@ async fn checked_transaction_looks_up_authority_once_and_rechecks_commit() {
         .create_workspace(scope.tenant_id, scope.workspace_id, "once")
         .await
         .unwrap();
-    let key = store.issue_key(scope, "admin").await.unwrap();
+    let key = store.seed_workspace_key(scope).await.unwrap();
     let auth = store.authenticate(&key.token).await.unwrap();
     let pool = store.pool();
     let before = pool.test_counts();

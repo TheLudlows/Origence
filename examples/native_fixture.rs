@@ -12,11 +12,9 @@ mod fixture_workspace;
 #[derive(Deserialize)]
 #[serde(tag = "fixture", rename_all = "snake_case")]
 enum Fixture {
-    MemberWorkspace {
+    Workspace {
         name: String,
         same_tenant_as: Option<Uuid>,
-        #[serde(default)]
-        single_key: bool,
     },
     ArchiveManifest {
         embedded: bool,
@@ -37,15 +35,14 @@ async fn main() -> anyhow::Result<()> {
 
 async fn run(fixture: Fixture) -> anyhow::Result<Value> {
     match fixture {
-        Fixture::MemberWorkspace {
+        Fixture::Workspace {
             name,
             same_tenant_as,
-            single_key,
         } => {
             let dir = PathBuf::from(
                 std::env::var_os("OC_DATA_DIR").context("missing fixture directory")?,
             );
-            fixture_workspace::seed_workspace(&dir, &name, same_tenant_as, single_key).await
+            fixture_workspace::seed_workspace(&dir, &name, same_tenant_as).await
         }
         Fixture::ArchiveManifest { embedded } => {
             let dir = PathBuf::from(
@@ -62,6 +59,3 @@ async fn run(fixture: Fixture) -> anyhow::Result<Value> {
         }
     }
 }
-
-#[path = "../tests/support/fixture_keys.rs"]
-mod fixture_keys;

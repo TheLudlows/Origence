@@ -345,8 +345,8 @@ def main():
         binary = binary_dir / ("origence.exe" if os.name == "nt" else "origence")
         shutil.copy2(args.binary, binary)
         host_env = isolated_env(str(data))
-        home = seed_workspace(host_env, "Plugin default workspace", single_key=True)
-        alternate = seed_workspace(host_env, "Plugin selected workspace", home["workspace_id"], single_key=True)
+        home = seed_workspace(host_env, "Plugin default workspace")
+        alternate = seed_workspace(host_env, "Plugin selected workspace", home["workspace_id"])
         with Host(str(binary), host_env, home["token"], [home["token"], alternate["token"]],
                   serve_args=("--local",), bind=args.bind) as host:
             first_asset = publish_probe(host, "default workspace")

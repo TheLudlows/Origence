@@ -118,8 +118,7 @@ impl SqliteTx {
     pub async fn run_catalog(&mut self, after: Uuid, limit: usize) -> StorageResult<Value> {
         self.check_permission(Permission::Read).await?;
         let owner = self.private_key_id().await?;
-        let workspace_wide = self.live_role().await? == "admin";
-        self.run_catalog_in_scope(after, limit, Some(owner), workspace_wide)
+        self.run_catalog_in_scope(after, limit, Some(owner), false)
             .await
     }
 
@@ -198,7 +197,7 @@ impl SqliteTx {
         end_ms: i64,
     ) -> StorageResult<Value> {
         self.check_permission(Permission::Read).await?;
-        let workspace_wide = self.live_role().await? == "admin";
+        let workspace_wide = self.live_role().await? == "deployment_admin";
         let (buckets, width_ms) = match window {
             "24h" => (24, 3_600_000),
             "7d" => (7, 86_400_000),
