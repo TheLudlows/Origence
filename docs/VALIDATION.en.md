@@ -4,6 +4,14 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Remove superseded developer tools
+
+Based on main `d8dd128`, with Linux, Rust 1.98.0, Node.js 24.22.1, and isolated synthetic data.
+
+- `cargo fmt --all -- --check`, `cargo clippy --locked --offline --all-targets -j 3 -- -D warnings`, `git diff --check`, and updated documentation links passed. Python `unittest discover` passed 3 tests in `tools` and 58 in `evals/pilot`.
+- `tools/anyseek_smoke.py --embedded --binary <origence>` passed. With the CI-pinned standalone AnySeek `6a46fc7`, `--cargo-tests --binary <origence> --run python3 tools/smoke.py --binary <origence>` passed eight real-backend contracts plus HTTP/MCP, restart, and withdrawal checks. The removed option returns an argument error.
+- `tools/installer_smoke.py --binary <origence> --claude <claude> --codex <codex>` passed deployment, setup, reinstall, and uninstall. The npm registry refused the connection, so the console was rebuilt from existing dependencies matching the lockfile. Native Windows and live-model acceptance were outside this run.
+
 ## 2026-11-28 · Remove the legacy key list and reviewer appointments
 
 Verified implementation `1282215c4151bafaafd4a215e1dc556ee8724750` against isolated fresh stores.

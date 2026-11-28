@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Isolated real AnySeek + Origence HTTP MCP acceptance; no model calls.
 
-Run with --anyseek-binary PATH and --test-executable PATH and/or --binary PATH.
+Run with --anyseek-binary PATH and one or more of --cargo-tests, --binary PATH, or --run COMMAND.
 Credentials and data live only in this invocation's environment/temp directory.
 """
 import argparse
@@ -170,7 +170,6 @@ def embedded_contract(binary):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--anyseek-binary")
-    parser.add_argument("--test-executable", action="append", default=[])
     parser.add_argument("--cargo-tests", action="store_true", help="run the real-backend Rust target through Cargo")
     parser.add_argument("--binary")
     parser.add_argument("--embedded", action="store_true", help="run the in-process local startup and restart contract on Unix")
@@ -181,7 +180,7 @@ def main():
         embedded_contract(str(Path(args.binary).resolve()))
         return
     require(args.anyseek_binary, "external mode needs --anyseek-binary")
-    require(args.test_executable or args.binary or args.cargo_tests or args.run, "provide a test executable, Cargo tests or Origence binary")
+    require(args.cargo_tests or args.binary or args.run, "provide --cargo-tests, --binary or --run")
     with tempfile.TemporaryDirectory(prefix="origence-anyseek-") as directory:
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -202,9 +201,6 @@ def main():
                 env.update(ORIGENCE_TEST_ANYSEEK_URL=base, ORIGENCE_TEST_ANYSEEK_API_KEY=key)
                 # Workspace collections are provisioned by Origence on first use.
                 env.pop("MASTER_KEY_SECRET", None)
-                for executable in args.test_executable:
-                    subprocess.run([str(Path(executable).resolve()), "--ignored", "--nocapture", "--test-threads=1"],
-                                   env=env, check=True, timeout=300)
                 if args.cargo_tests:
                     subprocess.run(["cargo", "test", "--locked", "--no-default-features", "--features", "host",
                                     "--test", "anyseek", "--", "--ignored", "--nocapture", "--test-threads=1"],

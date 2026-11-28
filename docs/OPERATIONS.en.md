@@ -195,7 +195,7 @@ Compare the binding's analysis_fingerprint with the AnySeek collection's analysi
 
 ## Native Windows development launcher
 
-Run `origence.exe serve --local` to start the API and local AnySeek. To also start the Node UI, run [`tools/start-dev.ps1`](WINDOWS-DEV.en.md) in the same PowerShell 7.4+ console. The launcher disables models.
+Run `origence.exe serve --local` to start the API and local AnySeek. To start the API and console together, use `.\bin\origence-deploy.cmd install`. See [Windows development](WINDOWS-DEV.en.md).
 
 ## Private archive and paired recovery
 
