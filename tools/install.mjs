@@ -2,10 +2,10 @@ import { realpathSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { connectClaude, connectCodex, removeClaude, removeCodex } from "./installer/agents.mjs";
 import {
-  ask, defaultEndpoint, npm, origenceBinary, repo, rollback, runInstaller, status, tokenPattern, withoutWorkspaceKey,
+  ask, defaultEndpoint, npm, repo, rollback, runInstaller, status, tokenPattern, withoutWorkspaceKey,
 } from "./installer/command.mjs";
 import {
-  check, executable, execute, keyFingerprint, prependPath, restoreUserEnvironment,
+  check, executable, keyFingerprint, prependPath, restoreUserEnvironment,
   windows, windowsSettings, writeUserEnvironment,
 } from "./installer/platform.mjs";
 import { connectMcp, endpointUrl, identity } from "./installer/protocol.mjs";
@@ -24,11 +24,10 @@ const usage = `Usage: origence-setup install [--agent claude|codex|both] [--endp
 --force                  Update settings for all installed agents
 --turn-sync-project DIR  Archive private turns for this project (defaults to the current project)
 --no-turn-sync           Pause private turn archiving
---origence PATH          Origence executable for plugin hooks
 --claude PATH            Claude Code executable, if it is outside PATH
 --codex PATH             Codex executable, if it is outside PATH
 
-Use origence-deploy to start a local API and console or initialize a workspace.`;
+Use origence-deploy to start a local API and console.`;
 
 function turnSyncProject(directory) {
   const path = resolve(directory);
@@ -117,23 +116,20 @@ async function install(state, args) {
       `Use the ${agents[name].label} profile used for setup, or uninstall before selecting another profile.`);
     if (profile) env[variable] = profile;
   }
-  const binary = origenceBinary(args.origence ?? old?.binary);
   const launchers = join(repo, "bin");
   check(executable(join(launchers, "origence-setup")), "The installer package is missing its origence-setup launcher.");
   const clients = Object.fromEntries(selected.map(name => [
     name, clientBinary(state, name, args[name] ?? state.value[name]?.executable),
   ]));
   const dirs = [...new Set([
-    launchers, dirname(binary),
+    launchers, dirname(process.execPath),
     ...Object.keys(agents).map(name => clients[name] ?? state.value[name]?.executable).filter(Boolean).map(dirname),
   ])];
   env.PATH = prependPath(process.env.PATH, dirs);
-  check(executable("origence", env.PATH) === binary,
-    "Select a binary named origence (origence.exe on Windows) for the plugin hook PATH.");
-  execute(binary, ["plugin-hook", "--help"], { env, diagnosis: "The Origence binary does not support Agent hooks" });
+  check(executable("node", env.PATH), "Node.js 24 must be on the Agent hook PATH.");
   const vars = { OC_API_KEY: token, OC_SERVER_URL: endpoint, OC_WORKSPACE_ID: who.workspace_id,
     OC_TURN_SYNC_PROJECT: archiveProject };
-  state.value.config = { endpoint, ...(windows ? {} : { token }), binary,
+  state.value.config = { endpoint, ...(windows ? {} : { token }),
     workspace: who.workspace_id, key: who.id, turnSyncProject: turnSync };
   state.save();
   for (const name of selected) agents[name].connect(state, clients[name], { ...env, ...vars }, endpoint);
@@ -145,5 +141,5 @@ async function install(state, args) {
 
 await runInstaller({
   name: "origence-setup", scope: "agent", usage, install, uninstall,
-  strings: ["agent", "endpoint", "token", "origence", "claude", "codex", "turn-sync-project"], flags: ["no-turn-sync"],
+  strings: ["agent", "endpoint", "token", "claude", "codex", "turn-sync-project"], flags: ["no-turn-sync"],
 });

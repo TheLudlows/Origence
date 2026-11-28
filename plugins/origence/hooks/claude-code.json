@@ -6,10 +6,10 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence",
+            "command": "node",
             "args": [
-              "plugin-hook",
-              "--client",
+              "--disable-warning=ExperimentalWarning",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/entry.mjs",
               "claude-code"
             ],
             "onFailure": "continue"
@@ -23,10 +23,10 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence",
+            "command": "node",
             "args": [
-              "plugin-hook",
-              "--client",
+              "--disable-warning=ExperimentalWarning",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/entry.mjs",
               "claude-code"
             ],
             "onFailure": "continue"
@@ -41,10 +41,10 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence",
+            "command": "node",
             "args": [
-              "plugin-hook",
-              "--client",
+              "--disable-warning=ExperimentalWarning",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/entry.mjs",
               "claude-code"
             ],
             "onFailure": "continue"
@@ -59,10 +59,10 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence",
+            "command": "node",
             "args": [
-              "plugin-hook",
-              "--client",
+              "--disable-warning=ExperimentalWarning",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/entry.mjs",
               "claude-code"
             ],
             "onFailure": "continue"
@@ -76,10 +76,10 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence",
+            "command": "node",
             "args": [
-              "plugin-hook",
-              "--client",
+              "--disable-warning=ExperimentalWarning",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/entry.mjs",
               "claude-code"
             ],
             "onFailure": "continue"
@@ -93,10 +93,10 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence",
+            "command": "node",
             "args": [
-              "plugin-hook",
-              "--client",
+              "--disable-warning=ExperimentalWarning",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/entry.mjs",
               "claude-code"
             ],
             "onFailure": "continue"
@@ -110,10 +110,10 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence",
+            "command": "node",
             "args": [
-              "plugin-hook",
-              "--client",
+              "--disable-warning=ExperimentalWarning",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/entry.mjs",
               "claude-code"
             ],
             "onFailure": "continue"
@@ -127,10 +127,10 @@
           {
             "type": "command",
             "timeout": 3,
-            "command": "origence",
+            "command": "node",
             "args": [
-              "plugin-hook",
-              "--client",
+              "--disable-warning=ExperimentalWarning",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/entry.mjs",
               "claude-code"
             ],
             "onFailure": "continue"

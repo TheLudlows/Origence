@@ -231,7 +231,7 @@ impl SkillDraft {
     }
 }
 impl SkillPackage {
-    /// Verify untrusted delivery bytes before export. This does not establish live
+    /// Verify untrusted package bytes before use. This does not establish live
     /// publication/source authority; callers must fetch through the authorized service.
     pub fn validate(&self) -> StorageResult<()> {
         let m = &self.manifest;

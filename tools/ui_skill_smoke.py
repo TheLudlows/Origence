@@ -7,8 +7,8 @@ import subprocess
 import tempfile
 import uuid
 
+from native_fixture import workspace as seed_workspace
 from mcp_smoke import Host, isolated_env, require, sanitized
-from plugin_smoke import bootstrap
 from ui_trace_smoke import QUERY, publish_policy
 
 BROWSER_CHECK = Path(__file__).resolve().parents[1] / "ui/scripts/check-run-skill-e2e.cjs"
@@ -21,8 +21,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="origence-run-skill-") as temporary:
         root = Path(temporary)
         env = isolated_env(temporary)
-        workspace = bootstrap(binary, root, env, "Synthetic Skill workspace")
-        unrelated = bootstrap(binary, root, env, "Unrelated Skill workspace")
+        workspace = seed_workspace(env, "Synthetic Skill workspace")
+        unrelated = seed_workspace(env, "Unrelated Skill workspace")
         admin = workspace["token"]
         forbidden = [admin, unrelated["token"]]
         with Host(str(binary), env, admin, forbidden, serve_args=("--local",)) as host:

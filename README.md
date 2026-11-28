@@ -10,7 +10,7 @@ Origence manages memory, knowledge, Skills, and traces. It provides HTTP and MCP
 
 - **Memory** records scoped facts, preferences, and decisions with version and source references.
 - **Knowledge** manages documents and their published versions, with source references and withdrawal.
-- **Skills** package reusable methods through private candidates, exact human approval, immutable publication, and Claude Code / Codex project exports.
+- **Skills** package reusable methods through private candidates, exact human approval, immutable publication, and authorized package downloads.
 - **Trace** stores private Run records, including server-side context preparation, reported Skill loads, tools and results, external assessment records, and collection gaps.
 
 Authorized workspace members can reuse published memory, knowledge, and Skills.
@@ -28,15 +28,10 @@ Choose a fresh data directory for this quick start.
 ```sh
 cargo build --locked
 export OC_DATA_DIR="$(mktemp -d)"
-./target/debug/origence --offline workspace-create --workspace-key demo
-./target/debug/origence --offline deployment-admin-rotate
 ./target/debug/origence serve --local
 ```
 
-Use the key returned by `workspace-create` to sign into the workspace or connect an Agent.
-The deployment administrator can create peer workspaces, manage their keys, and moderate global knowledge.
-Origence opens the embedded AnySeek catalog under `$OC_DATA_DIR/anyseek` and
-initializes workspace collections on first use.
+First startup writes a random deployment administrator key to `$OC_DATA_DIR/deployment-admin.key`. Use it to sign in to the console and create a workspace. The issued workspace key connects an Agent. The embedded AnySeek catalog lives under `$OC_DATA_DIR/anyseek`.
 
 ## Cloud deployment
 

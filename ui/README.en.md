@@ -19,15 +19,11 @@ npm start
 
 ### Workspace Key sign-in
 
-Run `origence --offline workspace-create --workspace-key <name>` while the host is stopped, then start the API and console. Use the issued key to sign into the console or configure an Agent. The console opens the key's workspace for browsing archived turns and managing memories. Rotate the key with `origence --offline workspace-key-rotate <workspace-id>` and sign in with the replacement.
-
-When console accounts are configured, the sign-in page opens with the username and password fields. Select **用 Key 登录** below the form to use a workspace key or deployment administrator key. A deployment without console accounts opens directly to the key field.
-
-The console started by `origence-deploy install --init <name>` configures an initial deployment administrator account. Workspace keys can also be used to sign in. For a manual key-only start, use `npm start -- --key-only`.
+After starting the API, create a workspace from the deployment console. Use the workspace key to sign into that space or configure an Agent. If console accounts are configured, use the sign-in page to switch to access-key sign-in.
 
 ### Deployment administrator
 
-Run `origence --offline deployment-admin-rotate` while the host is stopped to issue or rotate the deployment administrator key. Sign in through the console access-key field and select a workspace to inspect its original conversations, Runs, and published memories and knowledge. Rotation invalidates the previous key and its console session.
+Sign in with the `deployment-admin.key` created in the data directory on first startup. A local console installed with `origence-deploy install` also accepts its managed administrator account. The deployment administrator can create workspaces, manage credentials, and inspect archives and Runs.
 
 ### Global knowledge
 

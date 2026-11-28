@@ -16,10 +16,12 @@ import time
 import urllib.error
 import urllib.request
 import urllib.parse
+import uuid
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from anyseek_fixture_env import configure_fixture
+from native_fixture import admin_env
 
 
 def read_jsonl(path):
@@ -216,11 +218,7 @@ def main():
         with tempfile.TemporaryDirectory(prefix="oc-eval-") as directory, tempfile.TemporaryFile(mode="w+t") as hostlog:
             env["OC_DATA_DIR"] = directory
             binary = str(Path(args.binary).resolve())
-            bootstrap = subprocess.run([binary, "--offline", "workspace-create", "eval"], env=env,
-                                       capture_output=True, text=True, timeout=120)
-            if bootstrap.returncode:
-                raise RuntimeError("workspace bootstrap failed")
-            token = json.loads(bootstrap.stdout)["token"]
+            token = admin_env(env)
             serve = [binary, "serve", "--bind", "127.0.0.1:0"]
             if args.local:
                 serve.append("--local")
@@ -243,12 +241,12 @@ def main():
                 if base is None:
                     raise RuntimeError("host startup timed out")
 
-                def request(path, body=None):
+                def request(path, body=None, method=None):
                     headers = {"Authorization": "Bearer " + token}
                     if body is not None:
                         headers.update({"Content-Type": "application/json",
                                         "Idempotency-Key": hashlib.sha256((path + json.dumps(body)).encode()).hexdigest()})
-                    req = urllib.request.Request(base + path, headers=headers,
+                    req = urllib.request.Request(base + path, method=method, headers=headers,
                                                  data=None if body is None else json.dumps(body).encode())
                     try:
                         with opener.open(req, timeout=60) as response:
@@ -267,6 +265,10 @@ def main():
                         time.sleep(0.2)
                 mapping = {}
                 imports = []
+                scope = request("/admin/deployment/workspaces/" + str(uuid.uuid4()),
+                                {"name": "eval"}, method="PUT")
+                token = scope["key"]["token"]
+
                 stage = "import"
                 for doc in corpus:
                     started = time.perf_counter()

@@ -1,9 +1,9 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { existsSync, renameSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
-import { check, execute, home, windows } from "./installer/platform.mjs";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { check, execute } from "./installer/platform.mjs";
 import { activeService, listening, startService, stopService, waitForService } from "./installer/service.mjs";
-import { connectMcp, consoleLogin, endpointUrl, identity, isLoopback, uuid } from "./installer/protocol.mjs";
+import { connectMcp, consoleLogin, endpointUrl, identity, isLoopback } from "./installer/protocol.mjs";
 import {
   ask, credentialsPath, defaultEndpoint, grantKey, npm, origenceBinary, repo, rollback, runInstaller,
   saveCredentials, status, tokenPattern, withoutWorkspaceKey,
@@ -11,18 +11,15 @@ import {
 
 const account = "admin";
 const usage = `Usage: origence-deploy install [--endpoint URL] [--token KEY | --from-env]
-       origence-deploy install --init NAME [--endpoint URL]
        origence-deploy uninstall
 
 --from-env               Read OC_SERVER_URL and OC_API_KEY
---init NAME              Initialize a workspace Key and a deployment administrator account
 --force                  Refresh deployment settings and reset a linked account password
-                         Use with --init to back up and reinitialize local data
---data-dir PATH          Existing or explicitly initialized local backend data directory
+--data-dir PATH          Local backend data directory
 --ui-port PORT           Console port on 127.0.0.1 (default 3000)
 --origence PATH          Origence executable, if it is outside PATH and the checkout
 --verify-write           Create one labeled test Run and read it through the console
---show-secrets           Print workspace and newly issued deployment credentials to stdout
+--show-secrets           Print console and supplied workspace credentials to stdout
 --credentials-file PATH  Write a new private JSON file outside Git (never overwrites)`;
 
 function prepareConsole() {
@@ -41,55 +38,6 @@ function localDataDir(input, state, previous) {
   return join(state.dir, "data");
 }
 
-function safeToBackup(path, state) {
-  for (const preserve of [home, repo, state.dir]) {
-    const below = relative(path, preserve);
-    check(below && (below === ".." || below.startsWith(".." + (windows ? "\\" : "/")) || isAbsolute(below)),
-      "Choose a dedicated backend directory. The installer cannot move a parent of your home, repository or installer state.");
-  }
-}
-
-async function bootstrap(state, binary, endpoint, dataDir, name, force, env) {
-  check(isLoopback(endpoint) && endpoint.protocol === "http:", "Initialization requires a local HTTP endpoint.");
-  check(name.trim() && Buffer.byteLength(name) <= 256 && !name.includes("\0"),
-    "Choose a workspace name between 1 and 256 UTF-8 bytes.");
-  const previous = state.value.bootstrap;
-  if (previous?.endpoint === endpoint.origin && previous.dataDir === dataDir && !force)
-    return bootstrapAdministrator(state, binary, dataDir, env);
-  if (state.value.config?.endpoint === endpoint.origin && force) await stopService(state, "api");
-  check(!await listening(endpoint), "The endpoint is in use. Stop the external service before initializing or supply its existing token.");
-  if (existsSync(dataDir)) {
-    check(force, "The backend directory already exists. Supply its current key, or use --force --init to preserve it in a backup before creating a new workspace.");
-    safeToBackup(dataDir, state);
-    if (existsSync(join(dataDir, "context.db")))
-      execute(binary, ["--data-dir", dataDir, "--offline", "identity-check"], {
-        env, cwd: repo, diagnosis: "Cannot confirm the existing store is stopped and compatible. Stop all services using the directory",
-      });
-    const backup = dataDir + ".bak-" + new Date().toISOString().replaceAll(":", "-") + "-" + randomUUID().slice(0, 8);
-    renameSync(dataDir, backup);
-    status("backup", "success", backup);
-  }
-  const result = JSON.parse(execute(binary, ["--data-dir", dataDir, "--offline", "workspace-create", "--workspace-key", "--", name], {
-    env, cwd: repo, diagnosis: "Offline workspace creation failed. Check data directory permissions and ensure no host is using it",
-  }));
-  check(uuid.test(result.workspace_id) && tokenPattern.test(result.token), "Workspace creation did not return a valid workspace and token.");
-  state.value.bootstrap = { endpoint: endpoint.origin, dataDir, ...result };
-  state.save();
-  status("bootstrap", "success", result.workspace_id);
-  return bootstrapAdministrator(state, binary, dataDir, env);
-}
-
-function bootstrapAdministrator(state, binary, dataDir, env) {
-  if (state.value.bootstrap.deployment_admin_key) return state.value.bootstrap;
-  const result = JSON.parse(execute(binary, ["--data-dir", dataDir, "--offline", "deployment-admin-rotate"], {
-    env, cwd: repo, diagnosis: "Offline deployment administrator provisioning failed",
-  }));
-  check(/^oc_admin_[0-9a-f]{64}$/.test(result.token), "Deployment administrator provisioning returned an invalid credential.");
-  state.value.bootstrap.deployment_admin_key = result.token;
-  state.save();
-  return state.value.bootstrap;
-}
-
 async function ensureApi(state, endpoint, dataDir, binary, env) {
   if (!isLoopback(endpoint) || endpoint.protocol !== "http:") {
     await identityReady(endpoint.origin);
@@ -101,8 +49,6 @@ async function ensureApi(state, endpoint, dataDir, binary, env) {
     status("api", "skipped", "Reusing the ready API listener.");
     return;
   }
-  check(existsSync(join(dataDir, "context.db")),
-    "The local API is unreachable and no initialized data was found. Start the existing API or supply its --data-dir. For a new instance, use --init.");
   await stopService(state, "api");
   const host = endpoint.hostname === "localhost" ? "127.0.0.1" : endpoint.hostname;
   const cleaned = { ...env };
@@ -174,22 +120,13 @@ async function install(state, args) {
   const ui = "http://127.0.0.1:" + port;
   check(!isLoopback(endpoint) || Number(endpoint.port || (endpoint.protocol === "http:" ? 80 : 443)) !== port,
     "The API and console need different ports. Choose another --ui-port.");
-  const explicitToken = args.token ?? (args["from-env"] ? process.env.OC_API_KEY : undefined);
-  check(!args.init || !explicitToken, "Specify either a token or --init.");
-  let token = explicitToken ?? (sameEndpoint ? old.token : undefined);
-  let init = args.init;
-  const recovered = state.value.bootstrap;
-  if (!token && recovered?.endpoint === endpoint.origin && recovered.dataDir === dataDir) token = recovered.token;
-  if (!token && !init && interactive) {
-    token = (await ask("Workspace API key (leave empty to initialize locally): ", true)).trim();
-    if (!token && isLoopback(endpoint) && !await listening(endpoint) && !existsSync(dataDir))
-      init = (await ask("New workspace name (leave empty to cancel): ")).trim();
-  }
-  const initialize = init && (!sameEndpoint || !old?.initialized || args.force);
-  if (old && sameEndpoint && isLoopback(endpoint) && dataDir !== old.dataDir && !initialize)
-    check(!await listening(endpoint), "Stop the local API before selecting a different --data-dir.");
-  check(initialize || token, "A workspace API key is missing. Use --token, --from-env or --init for a fresh local instance.");
+  const local = isLoopback(endpoint) && endpoint.protocol === "http:";
+  const token = args.token ?? (args["from-env"] ? process.env.OC_API_KEY : undefined)
+    ?? (sameEndpoint ? old.token : undefined)
+    ?? (interactive && !local ? (await ask("Workspace API key (optional with a deployment key): ", true)).trim() || undefined : undefined);
   check(!token || tokenPattern.test(token), "The workspace token is not valid printable credential text.");
+  if (old && sameEndpoint && isLoopback(endpoint) && dataDir !== old.dataDir)
+    check(!await listening(endpoint), "Stop the local API before selecting a different --data-dir.");
   check(!old || args.force || sameEndpoint && old.token === token && old.ui === ui && old.dataDir === dataDir,
     "This installation is bound to another endpoint, key or local path. Use --force to update it.");
   if (await listening(new URL(ui)))
@@ -197,23 +134,17 @@ async function install(state, args) {
       "The console port is already in use by a service outside this installation. Select another --ui-port.");
   const binary = origenceBinary(args.origence ?? old?.binary);
   const env = withoutWorkspaceKey(process.env);
-  const suppliedDeploymentKey = env.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY;
+  const suppliedDeploymentKey = env.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY || env.OC_DEPLOYMENT_ADMIN_KEY || undefined;
   delete env.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY;
   execute(binary, ["--version"], { env, diagnosis: "Origence could not be executed" });
   status("executables", "success", "Origence is available.");
-  if (initialize) {
-    const bootstrapResult = await bootstrap(state, binary, endpoint, dataDir, init, args.force, env);
-    token = bootstrapResult.token;
-    if (interactive && !bootstrapResult.announced && !args["show-secrets"]) {
-      console.log(JSON.stringify({ endpoint: endpoint.origin, workspace_id: bootstrapResult.workspace_id, token }));
-      bootstrapResult.announced = true;
-      state.save();
-    }
-  } else if (init) status("bootstrap", "skipped", "Reusing the initialized workspace.");
-  const deploymentKey = state.value.bootstrap?.token === token
-    ? state.value.bootstrap.deployment_admin_key
-    : suppliedDeploymentKey ?? (sameEndpoint && old?.dataDir === dataDir ? old.deploymentKey : undefined);
   await ensureApi(state, endpoint, dataDir, binary, env);
+  const managedKeyFile = join(dataDir, "deployment-admin.key");
+  const managed = local && activeService(state, "api") && state.value.apiEndpoint === endpoint.origin;
+  const deploymentKey = suppliedDeploymentKey
+    ?? (sameEndpoint && old?.dataDir === dataDir ? old.deploymentKey : undefined)
+    ?? (!token && managed && existsSync(managedKeyFile) ? readFileSync(managedKeyFile, "utf8").trimEnd() : undefined);
+  check(token || deploymentKey, "Supply a workspace API key or a deployment administrator credential.");
   if (deploymentKey) {
     check(/^oc_admin_[a-f0-9]{64}$/.test(deploymentKey), "Invalid deployment administrator credential format.");
     const response = await fetch(new URL("/admin/deployment/me", endpoint), {
@@ -222,22 +153,22 @@ async function install(state, args) {
     check(response.ok && (await response.json())?.role === "deployment_admin",
       "The backend did not authorize the deployment administrator credential.");
   }
-  const who = await identity(endpoint.origin, token);
-  if (state.value.bootstrap?.token === token)
-    check(who.workspace_id === state.value.bootstrap.workspace_id, "The initialized API resolved to a different workspace.");
-  status("whoami", "success", { workspace_id: who.workspace_id, role: who.role });
-  const mcp = await connectMcp(endpoint.origin, token, who.workspace_id);
+  const who = token ? await identity(endpoint.origin, token) : null;
+  const mcp = who ? await connectMcp(endpoint.origin, token, who.workspace_id) : null;
   if (old && !sameEndpoint && state.value.apiEndpoint !== endpoint.origin) await stopService(state, "api");
-  status("http-mcp", "success", { tools: mcp.toolCount, workspace_id: who.workspace_id });
+  if (who) {
+    status("whoami", "success", { workspace_id: who.workspace_id, role: who.role });
+    status("http-mcp", "success", { tools: mcp.toolCount, workspace_id: who.workspace_id });
+  }
 
-  const mode = deploymentKey ? "deployment" : who.role === "workspace" ? "workspace" : "account";
-  const reconfigure = !old || args.force || (old.mode ?? "account") !== mode || old.deploymentKey !== deploymentKey || old.workspace !== who.workspace_id || old.key !== who.id || old.endpoint !== endpoint.origin || old.ui !== ui;
-  const config = { endpoint: endpoint.origin, token, workspace: who.workspace_id, key: who.id, ui,
+  const mode = deploymentKey ? "deployment" : who?.role === "workspace" ? "workspace" : "account";
+  const reconfigure = !old || args.force || (old.mode ?? "account") !== mode || old.deploymentKey !== deploymentKey || old.workspace !== who?.workspace_id || old.key !== who?.id || old.endpoint !== endpoint.origin || old.ui !== ui;
+  const config = { endpoint: endpoint.origin, token, workspace: who?.workspace_id, key: who?.id, ui,
     mode,
     ...(mode !== "workspace" ? { password: !args.force && old?.password || randomBytes(24).toString("base64url") } : {}),
     ...(deploymentKey ? { deploymentKey } : {}),
     binding: reconfigure ? randomUUID() : old.binding,
-    dataDir, binary, initialized: Boolean(initialize || recovered?.token === token || sameEndpoint && old?.initialized) };
+    dataDir, binary };
   if (reconfigure && await listening(new URL(ui)) && !(old?.ui === ui && activeService(state, "ui")))
     throw new Error("The console port is already in use. Select another --ui-port.");
   state.value.config = config;
@@ -274,6 +205,7 @@ async function install(state, args) {
     state.save();
   }
   const uiEnv = { ...env, ORIGENCE_API_BASE_URL: endpoint.origin };
+  delete uiEnv.OC_DEPLOYMENT_ADMIN_KEY;
   delete uiEnv.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY;
   if (mode !== "workspace") {
     uiEnv.ORIGENCE_UI_ACCOUNTS_DB = db;
@@ -285,9 +217,9 @@ async function install(state, args) {
   const login = mode === "workspace" ? { workspace_key: token } : { username: account, password: config.password };
   const consoleSession = await consoleLogin(ui, login, config.workspace, config.key, mode);
   try {
-    status("console-session", "success", { mode, workspace_id: config.workspace, role: who.role });
+    status("console-session", "success", { mode, workspace_id: config.workspace, role: who?.role ?? "deployment_admin" });
     if (deploymentKey) status("deployment-admin-session", "success", "Verified the deployment administrator account.");
-    if (args["verify-write"] && ["writer", "admin", "workspace"].includes(who.role)) {
+    if (args["verify-write"] && mcp && ["writer", "admin", "workspace"].includes(who.role)) {
       state.value.probes ??= {};
       const scope = [endpoint.origin, who.workspace_id, who.id].join("/");
       const run = state.value.probes[scope] ??= randomUUID();
@@ -303,17 +235,20 @@ async function install(state, args) {
     await consoleSession.logout().catch(() => {});
   }
 
-  const credentials = { endpoint: endpoint.origin, workspace_id: who.workspace_id, role: who.role, ui,
+  const credentials = { endpoint: endpoint.origin, workspace_id: who?.workspace_id, role: who?.role ?? "deployment_admin", ui,
     login_mode: mode, token, ...(mode !== "workspace" ? login : {}),
     ...(deploymentKey ? { deployment_admin_key: deploymentKey } : {}) };
   if (credentialFile) saveCredentials(credentialFile, credentials);
   if (args["show-secrets"] || interactive) {
     const displayed = { ...credentials };
-    if (!args["show-secrets"]) delete displayed.token;
+    if (!args["show-secrets"]) {
+      delete displayed.token;
+      delete displayed.deployment_admin_key;
+    }
     status("installation", "success", displayed);
   } else {
-    status("installation", "success", { endpoint: endpoint.origin, workspace_id: who.workspace_id, role: who.role,
-      ui, login_mode: mode, credentials: "Use --show-secrets or --credentials-file when initializing to obtain the issued keys." });
+    status("installation", "success", { endpoint: endpoint.origin, workspace_id: who?.workspace_id, role: who?.role ?? "deployment_admin",
+      ui, login_mode: mode, credentials: "Use --show-secrets or --credentials-file to obtain console credentials." });
   }
   delete state.value.bootstrap;
   state.save();
@@ -321,6 +256,6 @@ async function install(state, args) {
 
 await runInstaller({
   name: "origence-deploy", scope: "deploy", usage, install, uninstall,
-  strings: ["endpoint", "token", "init", "data-dir", "ui-port", "origence", "credentials-file"],
+  strings: ["endpoint", "token", "data-dir", "ui-port", "origence", "credentials-file"],
   flags: ["verify-write", "show-secrets"],
 });

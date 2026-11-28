@@ -75,6 +75,6 @@ origence-skill withdraw SKILL_UUID 1
 # Subsequent online package fetch now fails.
 ```
 
-撤回来源也会拒绝在线获取。现有 `origence skill-export` 仍可为 Claude Code/Codex 显式导出。离线副本无法远程清理或立即收回。此次没有新增原生客户端加载、自动发布、共享导航、结构迁移或跨 Run 挖掘。
+撤回来源也会拒绝在线获取。已下载的离线副本由调用方管理。离线副本无法远程清理或立即收回。此次没有新增原生客户端加载、自动发布、共享导航、结构迁移或跨 Run 挖掘。
 
 测试结果及验收范围见 [Issue 88 历史验证](https://github.com/TheLudlows/Origence/blob/a56246406a0688f646a45a85cc2954fb14a8d28a/docs/validation/issue-88-skill.md)。

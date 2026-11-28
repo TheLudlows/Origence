@@ -60,8 +60,4 @@ pub mod worker;
 #[cfg(feature = "host")]
 pub mod client;
 #[cfg(feature = "host")]
-pub mod client_hook;
-#[cfg(feature = "host")]
-pub mod client_skill;
-#[cfg(feature = "host")]
 pub mod host;

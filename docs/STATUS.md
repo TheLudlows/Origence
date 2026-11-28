@@ -13,7 +13,7 @@ Claude Code 与 Codex 已通过同 Key 会话互读和独立 Run 验收。双向
 | --- | --- | --- |
 | 记忆 | 显式写入与版本化更正、身份条件与精确筛选、受控提取、来源引用与撤回。已有单值的不同提取结果另存为证据，显式确认可更新已发布值。见[记忆契约](contracts/memory.md)。[长期记忆](contracts/memory-consolidation.md)统一接收事实和经验来源并一起召回。 | P0 真实任务验收、归纳的真实模型质量 |
 | 知识 | Text、Markdown、PDF 入库，版本读取与比较、发布与撤回；更新失败保留原发布版本。见 [API](API.md#接口) | P0 真实任务验收 |
-| Skill | [从 Run 详情选取依据、起草及提交审阅](SKILL-CANDIDATE-CLI.zh-CN.md#在控制台从-run-起草)、[选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)、选定审阅包、精确批准、不可变发布、在线下载及两种客户端目录格式导出。writer 可审阅与发布。Windows 公开样例已验证两端原生加载及来源撤回后拒绝新导出。见[实测记录](../evals/pilot/native-skill.windows.json) | 两场景未见题跨端复用与独立核验、受管在线重载 |
+| Skill | [从 Run 详情选取依据、起草及提交审阅](SKILL-CANDIDATE-CLI.zh-CN.md#在控制台从-run-起草)、[选定经历 CLI](SKILL-CANDIDATE-CLI.zh-CN.md)、选定审阅包、精确批准、不可变发布、在线下载。writer 可审阅与发布。历史 Windows 公开样例验证了两端原生加载及撤回来源后的访问限制。见[实测记录](../evals/pilot/native-skill.windows.json) | 两场景未见题跨端复用与独立核验、受管在线重载 |
 | Trace | 私有 Run、上下文准备回执、HTTP/MCP 显式上报、Codex 和 Claude Code 插件的默认 Run Hook、所有者转录的外部核验、精确版本引用与归档 PDF 页内定位。见 [Run 契约](contracts/runs.zh-CN.md) | 两端完整事件覆盖、端到端证据核对及独立签认 |
 | 检索与上下文组装 | AnySeek 全文、向量、一跳图候选与权威复核。默认关键词检索要求查询词项全部出现。真实引擎本地回归通过。日常上下文按预算组装带业务日期、时间线和固定引用的归纳事实，控制台可核对原始来源。[证据包契约](contracts/evidence-bundle.zh-CN.md) | 当前后端的模型检索质量、容量与延迟验收 |
 | 会话与反馈 | AnySeek 保存新轮次的正文和目录，按逻辑 Key 隔离。控制台「会话」显示已保存的问答。支持按 ID 与序号读取、关键词与向量召回、显式反馈。成员授权空间按权限删除问答，单 Key 工作空间保留原始会话。经验可用人工确认或固定文档版本直接提交，也可走 Improve。 | 在 P0 双场景任务中核对会话和反馈证据 |
@@ -45,12 +45,12 @@ SQLite 仍保存不可变经验候选，以及 Run 精确回放所需的普通�
 
 `origence serve --local` 通过 Rust SDK 在同一进程打开 AnySeek 本地 Catalog，目录为 `OC_DATA_DIR/anyseek`。启动恢复、已发布集合核验及正常关闭由同一宿主管理。Windows 开发脚本调用此入口，再按需启动 Node UI。云上镜像使用 `origence serve` 连接独立部署的 AnySeek，地址与凭据由部署环境提供。[运维说明](OPERATIONS.md#anyseek-全文与向量)
 
-`origence-setup` 只接入 Claude Code 和 Codex，使用已有 API 和工作区 Key。`origence-deploy` 管理本地 API、工作区初始化和控制台。两者独立卸载并保留数据。[安装说明](INSTALLER.md)
+`origence` 公开 `serve`。首次启动登记部署管理员。管理员通过控制台或 HTTP 创建工作空间。`origence-deploy` 管理本地 API 和控制台，`origence-setup` 使用已有工作区 Key 接入 Agent。两者独立卸载并保留数据。[安装说明](INSTALLER.md)
 
 ## Streamable HTTP MCP
 
 Claude Code 和 Codex 插件通过 Origence 服务端的 `/mcp` 检索和调用工具。检索无需安装本地 Origence。服务端按请求校验凭据和工作区权限，未指定工作区时使用凭据的默认工作区。
-插件自动 Run Hook 仍经本地命令上报。见[客户端接入](CLIENTS.md#直连-http-mcp)与[验证](VALIDATION.md)。
+两个插件共用 Node.js Hook，负责 Run 上报和可选归档。见[客户端接入](CLIENTS.md#直连-http-mcp)与[验证](VALIDATION.md)。
 
 工作空间 Key 和成员授权工作区的管理员可在控制台「Agent 连接」查看本空间正在处理的 MCP 请求和最近五分钟的活动，
 按凭据汇总并显示握手识别的客户端类型。观测限于当前服务进程。见 [Agent 连接接口](API.md#agent-连接)。

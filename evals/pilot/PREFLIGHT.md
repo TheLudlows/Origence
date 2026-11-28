@@ -10,7 +10,7 @@
 python tools/anyseek_smoke.py --anyseek-binary ANYSEEK_BINARY --run python evals/pilot/live_skill_preflight.py --binary ORIGENCE_BINARY --claude-model CLAUDE_MODEL --codex-model CODEX_MODEL --report NEW_REPORT.json
 ```
 
-两个客户端共享 100 秒，各自导出同一获批 Skill 并返回包内随机串。脚本核验原生加载信号与 Run，再撤回支持来源，核对新导出被拒和原有文件残留。必要检查缺失时返回非零状态。[实测记录](native-skill.windows.json)
+两个客户端共享 100 秒，各自下载同一获批 Skill 并写入测试项目 并返回包内随机串。脚本核验原生加载信号与 Run，再撤回支持来源，核对新下载被拒和原有文件残留。必要检查缺失时返回非零状态。[实测记录](native-skill.windows.json)
 
 ## 复跑双场景跨客户端交接
 

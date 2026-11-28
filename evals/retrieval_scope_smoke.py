@@ -10,12 +10,7 @@ from urllib.error import HTTPError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from mcp_smoke import Host, isolated_env
-
-
-def bootstrap(binary, env, name):
-    process = subprocess.run([binary, "--offline", "workspace-create", name], env=env,
-                             capture_output=True, text=True, check=True, timeout=60)
-    return json.loads(process.stdout)["token"]
+from native_fixture import workspace as seed_workspace
 
 
 def lookup(host, mode):
@@ -41,8 +36,8 @@ def smoke(binary, model, directory):
             env = isolated_env(str(directory / "origence"))
             env.update(OC_ENABLE_MODELS="true", OC_MODEL_BASE_URL=f"http://{address}/v1",
                        OC_EMBEDDING_MODEL=embedding["embedding"], OC_EMBEDDING_DIMENSION="512")
-            owner = bootstrap(binary, env, "scope-a")
-            other = bootstrap(binary, env, "scope-b")
+            owner = seed_workspace(env, "scope-a")["token"]
+            other = seed_workspace(env, "scope-b")["token"]
             with Host(binary, env, owner, [owner, other], serve_args=("--local",)) as host:
                 modes = ("keyword", "vector", "hybrid")
                 asset = host.publish("玻璃鹿 授权 审核规则要求双人确认。")

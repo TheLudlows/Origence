@@ -21,6 +21,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 from live_archive_smoke import CLAUDE_ENV, child_environment
+from native_fixture import workspace as seed_workspace
 from mcp_smoke import Host, isolated_env, require
 
 
@@ -92,15 +93,29 @@ def publish_from_source(host, space, reviewer, name, description, body, source):
     }
 
 
-def export(binary, host, key, project, client, package):
-    manifest = package["manifest"]
+def fixture_skill(host, project, client, expected):
+    """Stage a pinned synthetic test package after checking the live download."""
+    manifest = expected["manifest"]
+    route = f'/v1/skills/{manifest["skill_id"]}/versions/{manifest["version"]}/package'
+    package = host.request(route)
+    require(package == expected, "downloaded Skill does not match the pinned publication")
+    require(re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", manifest["name"]), "invalid fixture Skill name")
+    files = package["files"]
+    require("SKILL.md" in files and set(files) == set(manifest["artifact_sha256"]),
+            "invalid fixture Skill inventory")
+    for name, body in files.items():
+        require(name == "SKILL.md" or re.fullmatch(r"references/[a-z0-9-]{1,64}[.](?:md|txt)", name),
+                "invalid fixture Skill path")
+        require(sha(body.encode("utf-8")) == manifest["artifact_sha256"][name], "invalid fixture Skill digest")
     project.mkdir()
-    result = subprocess.run([binary, "--server-url", host.base, "skill-export", "--client", client,
-                             "--project", str(project), "--tenant-id", manifest["tenant_id"],
-                             "--workspace-id", manifest["workspace_id"], manifest["skill_id"],
-                             str(manifest["version"])], env=dict(child_environment(), OC_API_KEY=key),
-                            capture_output=True, timeout=15)
-    return result
+    layout = {"codex": ".agents", "claude-code": ".claude"}[client]
+    directory = project / layout / "skills" / manifest["name"]
+    directory.mkdir(parents=True)
+    for name, body in files.items():
+        path = directory / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_bytes(body.encode("utf-8"))
+    (directory / "origence-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
 
 def installed(project, client, package):
@@ -254,7 +269,7 @@ def codex_turn(args, project, run, prompt, deadline, path=None, body=None):
                 listing = rpc("skills/list", {"cwds": [str(project)], "forceReload": True}, 2)
                 matches = [s for entry in listing["data"] for s in entry["skills"] if s["name"] == name
                            and Path(s["path"]).samefile(path) and s.get("enabled", True)]
-                require(len(matches) == 1, "Codex did not discover the exported project Skill")
+                require(len(matches) == 1, "Codex did not discover the staged project Skill")
                 inputs.append({"type": "skill", "name": name, "path": str(path)})
             thread = rpc("thread/start", {
                 "cwd": str(project), "model": args.codex_model, "approvalPolicy": "never",
@@ -296,9 +311,7 @@ def probe(args, report):
         root = Path(tmp)
         env = isolated_env(tmp)
         require("OC_ANYSEEK_API_KEY" in env, "run under tools/anyseek_smoke.py")
-        boot = subprocess.run([args.binary, "--offline", "workspace-create", "skill-preflight"],
-                              cwd=root, env=env, capture_output=True, check=True, timeout=15)
-        space = json.loads(boot.stdout)
+        space = seed_workspace(env, "skill-preflight")
         admin = space["token"]
         with Host(args.binary, env, admin, [admin, env["OC_ANYSEEK_API_KEY"]]) as host:
             def issue(role):
@@ -320,8 +333,7 @@ def probe(args, report):
                 jobs = {}
                 for client, load in (("codex", codex_load), ("claude-code", claude_load)):
                     project = root / client
-                    exported = export(args.binary, host, writer["token"], project, client, package)
-                    require(exported.returncode == 0, "export failed")
+                    fixture_skill(host, project, client, package)
                     paths[client] = installed(project, client, package)
                     run = uid()
                     host.request("/v1/runs", {"run_id": run, "summary": "Synthetic native Skill loading probe"})
@@ -373,11 +385,14 @@ def probe(args, report):
             report["withdrawal"] = {}
             for client in paths:
                 fresh = root / ("withdrawn-" + client)
-                denied = export(args.binary, host, writer["token"], fresh, client, package)
-                reason = b"resource not found" if report["withdrawn_package_http"] == 404 else b"permission denied"
-                require(denied.returncode != 0 and reason in denied.stderr.lower(),
-                        "export did not report the expected withdrawal error")
-                require(not any(fresh.iterdir()), "withdrawn export wrote project files")
+                try:
+                    fixture_skill(host, fresh, client, package)
+                except HTTPError as error:
+                    with error:
+                        require(error.code == report["withdrawn_package_http"], "unexpected withdrawal status")
+                else:
+                    raise RuntimeError("withdrawn package was installed")
+                require(not fresh.exists(), "withdrawn package wrote project files")
                 installed(root / client, client, package)
                 report["withdrawal"][client] = {"new_export_denied": True, "existing_copy_matches": True}
 

@@ -24,7 +24,7 @@ identity reservations, and publication plans.
 
 Lock file names and database paths follow the configured startup implementation. Never edit business records directly in either database. Vector and graph indexes are not authoritative for source state. Grant data directory access only to the host OS identity. API keys cannot restrict users who already have local file access.
 
-`origence serve` (compatibility alias `api`) runs HTTP and a single Worker. Ctrl+C requests graceful shutdown. HTTP stops accepting requests, and storage closes after the Worker finishes its current job. After a forced exit, the OS releases the lock automatically. The next startup advances the run_token and replays unfinished jobs. Do not remove lock files to bypass a running host.
+`origence serve` runs HTTP and a single Worker. Ctrl+C requests graceful shutdown. HTTP stops accepting requests, and storage closes after the Worker finishes its current job. After a forced exit, the OS releases the lock automatically. The next startup advances the run_token and replays unfinished jobs. Do not remove lock files to bypass a running host.
 
 `/health/live` indicates process liveness. `/health/ready` requires a running Worker and successful storage checks. Model services do not affect readiness. Individual model failures appear in job state. Business endpoints stay closed if startup reconciliation or storage checks fail.
 
@@ -46,7 +46,7 @@ The old implementation used a subprocess to terminate parsing after a hard 30-se
 
 ## Initialization and credentials
 
-For a fresh database, run `origence --offline workspace-create --workspace-key NAME` to issue a workspace key, then `origence --offline deployment-admin-rotate` to issue the deployment administrator key. Save both credentials before starting the host. Rotate single-workspace keys offline with `workspace-key-rotate`. The [identity and credential management reference](API.en.md#identity-and-credential-management) covers role-based credentials and grants. Offline administration uses OS authorization and needs exclusive access to the data directory.
+On first `origence serve`, a database with no deployment administrator uses `OC_DEPLOYMENT_ADMIN_KEY` or generates a random key in `OC_DATA_DIR/deployment-admin.key`. A supplied key uses `oc_admin_` followed by 64 lowercase hexadecimal characters. SQLite stores the digest. Later starts retain that administrator, and the environment variable applies only to initial registration. Keep the local key file or injected secret private. Use the console or the [deployment API](API.en.md#deployment-administrator) to create workspaces and rotate workspace keys.
 
 Origence reads process environment variables. It does not load `.env` automatically. Compose reads `.env`. Keep model credentials, API tokens, and `.env` out of Git. See origence --help for command arguments and the next section for local model setup.
 
@@ -91,7 +91,7 @@ On bare-metal cloud hosts, build the remote-only binary with `cargo build --rele
 
 Each request takes `tenant_id` from the authenticated server-side Scope and sends it as `X-AnySeek-Tenant`. The `workspace_id` maps to `ws_<去掉连字符的 UUID>` (the UUID without hyphens). Each workspace has one collection. Separate workspaces within one tenant use different collections and separate tenants use different namespaces. Clients and models cannot set AnySeek routing or service credentials. Origence user keys, private sessions, candidate scope filtering, and final authorization, source, and version checks still apply.
 
-At startup, the host validates the service credential and version through `/api/v1/live`. It creates no placeholder collections. At first retrieval or publication, the host reads the workspace collection and creates it from the fixed schema only if absent. After concurrent creation or a lost creation response, strict readback verifies the schema, tokenizer implementation, stop-word digest, capacity, dimensions, and embedding_space_id. An incompatible collection is never overwritten. Inspect the required schema with `origence anyseek-schema [--with-space]`. No manual collection creation is needed.
+At startup, the host validates the service credential and version through `/api/v1/live`. It creates no placeholder collections. At first retrieval or publication, the host reads the workspace collection and creates it from the fixed schema only if absent. After concurrent creation or a lost creation response, strict readback verifies the schema, tokenizer implementation, stop-word digest, capacity, dimensions, and embedding_space_id. An incompatible collection is never overwritten.
 
 `OC_ANYSEEK_URL` must be an HTTPS origin, with HTTP allowed on loopback. It must not contain paths, credentials, or query parameters. Container loopback refers to the container itself. The `origence-content-backend-v2` binding records the endpoint, routing, and fixed model profile and dimensions. It stores no service credential. On first collection use, persist the analysis digest before remote publication. Only empty directories with no published full text may lack an initialized digest. On reopening, validate collections associated with authoritative publications. A missing committed collection or configuration drift fails explicitly and never triggers silent recreation. Credential rotation for the same target leaves the binding intact. Older binding formats are not converted automatically. Backups must include the full Origence directory and each tenant/workspace collection according to AnySeek's procedures.
 
@@ -131,17 +131,9 @@ ollama serves as a placeholder key for the local service. The commands configure
 
 Changing the embedding URL, model, or dimension does not rebuild old vectors. Use a separate temporary data directory for evaluation. Re-import or republish business data under the existing profile constraints. See [evaluation instructions](../evals/README.en.md) for entry points. Historical experiments on an old backend are not current AnySeek quality measurements.
 
-## Offline memory identity check
+## Memory identity checks
 
-New native SQLite databases have the complete identity schema. Identities are recorded in oc_assets, and deleted content items retain their reservations. See [storage invariants](contracts/storage.en.md).
-
-`identity-check` performs read-only, same-version validation of an existing database, including the format marker and complete authority schema. It does not create or repair tables.
-
-1. Gracefully stop the host and all offline clients, and back up the entire data directory.
-2. Run `origence --data-dir DATA_DIR --offline identity-check`.
-3. A valid same-version database produces `{"feature":"memory-identity-v1","valid":true}`. Failed checks exit nonzero.
-
-Validation rejects missing files or tables, unmarked legacy databases, weak constraints, and name collisions with views. It installs or converts nothing. The command does not load models, AnySeek, graph, or Blob. It depends on OS directory permissions and an exclusive path lock. A missing context.db is not created. Read-only validation has no upgrade status or write mode. Library callers use `SqliteStore::check_memory_identity(path)`, which returns `()` on success.
+Startup validates the complete same-version SQLite schema. Library callers may use `SqliteStore::check_memory_identity(path)` for a read-only check under the exclusive lock. The method creates or repairs no files.
 
 ## Failures and recovery
 
@@ -214,15 +206,7 @@ AnySeek group versions to fence delayed writes.
 1. Stop Origence and AnySeek, record both versions, and back up the complete Origence data directory.
    A standalone AnySeek uses a separate data directory. Embedded AnySeek lives inside the Origence
    directory. Retain the original backup.
-2. On an isolated copy, run `origence --offline --data-dir <copy> archive-verify --isolated-copy`.
-   Add `--local` for embedded AnySeek. For standalone AnySeek, set `OC_ANYSEEK_URL` and
-   `OC_ANYSEEK_API_KEY` for the isolated service at the bound address. Save the manifest's AnySeek
-   version, visible turn count, and `directory_sha256`. The digest covers bodies, ordering, source
-   IDs, session sequence allocations, and the AnySeek group versions retained for deleted turns.
-3. Restore the paired directories and binding with the same versions while stopped. Re-run
-   `archive-verify` and compare the manifest, then check ordered reads, keyword and vector search,
-   and key isolation through the API. Comparison detects a missing group for an ordinary turn
-   without a durable Run or feedback proof. Callers retry uncommitted content with the original body.
+2. Restore both directories and the backend binding in an isolated environment using the same versions. Use the API to verify ordered reads, keyword and vector search, and key isolation.
+3. To compare exact manifests, library callers may use `archive_maintenance::run` or `run_embedded` on stopped copies and compare counts and `directory_sha256` before and after restoration.
 
-The manifest describes logical visibility on stopped copies. Online snapshots, cross-version
-restore, and physical erasure are outside this verification.
+Online snapshots, cross-version restoration, and physical erasure are outside this verification.

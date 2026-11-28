@@ -25,7 +25,7 @@
 
 实际锁文件命名和数据库路径以配置及启动实现为准。不要直接修改任一库的业务记录；向量和图不是来源状态的权威。数据目录只授予宿主 OS 身份访问权限，API key 不能保护已经取得本地文件访问权的用户。
 
-`origence serve`（兼容别名 `api`）运行 HTTP 和单 Worker，Ctrl+C 请求优雅停止：HTTP 停止接收，Worker 完成当前任务后关闭存储。进程强退后 OS 自动释放锁；下次启动提升未完成作业的 run_token 并重放。不要删除锁文件来绕过正在运行的宿主。
+`origence serve`运行 HTTP 和单 Worker，Ctrl+C 请求优雅停止：HTTP 停止接收，Worker 完成当前任务后关闭存储。进程强退后 OS 自动释放锁；下次启动提升未完成作业的 run_token 并重放。不要删除锁文件来绕过正在运行的宿主。
 
 `/health/live` 表示进程存活；`/health/ready` 要求 Worker 正在运行且存储检查通过。模型服务不计入 ready，单个模型失败体现在任务状态。启动对账或存储检查失败时不开放业务服务。
 
@@ -52,7 +52,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ## 初始化与凭据
 
-新库先执行 `origence --offline workspace-create --workspace-key NAME` 签发工作空间 Key，再执行 `origence --offline deployment-admin-rotate` 签发部署管理员 Key。保存两项凭据后启动宿主。单 Key 工作空间用 `workspace-key-rotate` 离线轮换。成员授权模式的密钥及其他空间授权见 [身份与密钥管理](API.md#身份与密钥管理)。离线管理依赖操作系统授权，必须独占数据目录。
+首次启动 `origence serve` 时，若数据库中还没有部署管理员，使用 `OC_DEPLOYMENT_ADMIN_KEY` 提供的 Key，或随机生成并保存到 `OC_DATA_DIR/deployment-admin.key`。自备 Key 的格式为 `oc_admin_` 加 64 位小写十六进制字符。SQLite 保存摘要。后续启动保留该管理员，环境变量仅用于首次登记。保管本地 Key 文件或注入的秘密。用管理员登录控制台或调用[部署管理 API](API.md#部署管理员)创建工作空间及轮换工作空间 Key。
 
 程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。命令参数以 origence --help 为准；本地模型配置见下节。
 
@@ -110,7 +110,6 @@ Origence 自身的用户 key、私有会话、候选范围过滤和最终授权/
 宿主启动验证 `/api/v1/live` 服务凭据和版本；不会创建占位集合。workspace 首次检索或
 发布时先读取集合，缺失才按固定 schema 创建。并发和创建响应丢失后，通过严格回读核验
 schema、分词器实现、停用词摘要、容量、维度与 embedding_space_id，不覆盖不兼容集合。
-`origence anyseek-schema [--with-space]` 仍可用于查看所需 schema，无须手工建集合。
 
 `OC_ANYSEEK_URL` 要求 HTTPS origin（loopback 可用 HTTP），不能带路径、凭据或查询参数。
 容器的 loopback 指容器自身。后端绑定 `origence-content-backend-v2` 保存 endpoint、路由规则、固定模型 profile/维度，
@@ -157,21 +156,9 @@ ollama 是本机服务的占位 key。上述命令配置当前 PowerShell 会话
 
 更换 Embedding 地址、模型或维度不会重建旧向量；评估使用独立临时数据目录，业务数据需按既有 profile 约束重新导入/发布。运行入口见 [评估说明](../evals/README.md)；旧引擎上的历史实验不能当作当前 AnySeek 质量结果。
 
-## 离线记忆身份检查
+## 记忆身份检查
 
-原生 SQLite 新库包含完整身份 schema，身份存于 oc_assets，删除内容条目仍保留占位；详见[存储不变量](contracts/storage.md)。
-
-`identity-check` 对已有数据库执行
-只读同版本检查，包括格式标记和完整 authority schema，不创建或修复任何表。
-
-1. 正常停止宿主及所有离线客户端，备份整个数据目录。
-2. 执行 `origence --data-dir DATA_DIR --offline identity-check`。
-3. 合法同版本库输出 `{"feature":"memory-identity-v1","valid":true}`；检查失败以非零状态退出。
-
-缺文件、缺表、未标记旧库、弱约束或同名视图占用均拒绝，不安装、不转换。
-命令不加载模型、AnySeek、图或 Blob；依赖 OS 目录权限并要求独占路径锁。
-不存在的 context.db 不会被新建；只读检查没有升级状态或写入模式。
-库调用方改用 `SqliteStore::check_memory_identity(path)`，成功返回 `()`。
+宿主启动时校验现有 SQLite 的完整同版本 schema。库调用方也可用 `SqliteStore::check_memory_identity(path)` 在独占锁下只读检查；该方法不创建或修复文件。
 
 ## 失败与恢复
 
@@ -269,12 +256,7 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 
 1. 停止 Origence 和配套 AnySeek，记录版本并备份完整 Origence 数据目录。独立模式另备份 AnySeek
    数据目录，嵌入模式的 AnySeek 在 Origence 目录内。保留原始备份。
-2. 在隔离副本运行 `origence --offline --data-dir <副本> archive-verify --isolated-copy`。
-   嵌入模式加 `--local`。独立模式使用隔离 AnySeek 的 `OC_ANYSEEK_URL` 和
-   `OC_ANYSEEK_API_KEY`，服务地址要与绑定文件一致。保存清单的 AnySeek 版本、
-   可见轮次数和 `directory_sha256`。摘要涵盖正文、顺序、来源、会话已分配序号和已删除轮次保留的 AnySeek 组版本。
-3. 用同版本停机还原配套目录和绑定文件，重新执行 `archive-verify` 比对清单，再通过 API 验证
-   按序分页、关键词、向量和跨 key 隔离。对没有被 Run 或反馈等用途引用的普通轮次，清单对比
-   用于发现整组缺失。尚未提交的正文由调用方携原文重试。
+2. 用同版本在隔离环境恢复成对目录和绑定文件，再通过 API 验证按序分页、关键词、向量召回及跨 Key 隔离。
+3. 需要精确清单时，库调用方可在停机副本上使用 `archive_maintenance::run` 或嵌入模式的 `run_embedded`，比较恢复前后的条数和 `directory_sha256`。
 
-清单表示停机副本的逻辑可见性。在线快照、跨版本恢复和介质物理擦除超出本验证范围。
+在线快照、跨版本恢复和介质物理擦除超出本验证范围。

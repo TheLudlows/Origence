@@ -1,7 +1,7 @@
 #[cfg(feature = "host")]
-mod catalog;
+mod agent_hooks;
 #[cfg(feature = "host")]
-mod client_hooks;
+mod catalog;
 #[cfg(feature = "host")]
 mod content_storage;
 #[cfg(feature = "host")]
@@ -12,7 +12,6 @@ mod evidence_bundle;
 mod foundation_http;
 #[cfg(feature = "host")]
 mod global_knowledge;
-mod identity_check_cli;
 mod identity_vector_regression;
 mod initialization;
 mod learning_loop;

@@ -25,9 +25,9 @@
 
 `--agent both` 可用同一地址和 Key 一次接好两端。省略 `--agent` 时安装 Claude Code。两端复用各自已安装的 CLI，或通过 npm 获取固定版本。若 CLI 不在 PATH，使用 `--claude` 或 `--codex` 指定路径。[客户端接入细节](CLIENTS.md)
 
-按提示输入 API 地址和工作区 Key，Key 输入不回显。本机 API 通常是 `http://127.0.0.1:8080`，远程地址使用 HTTPS，省略 `/mcp`。可用 `--endpoint` 和 `--token` 传参，自动化优先通过启动环境传入 `OC_SERVER_URL` 和 `OC_API_KEY` 后加 `--from-env`，避免 Key 进入命令行历史。只检索使用 `reader`，Run Hook 上报要求写权限。Hook 仍由本机 Origence 二进制处理。
+按提示输入 API 地址和工作区 Key，Key 输入不回显。本机 API 通常是 `http://127.0.0.1:8080`，远程地址使用 HTTPS，省略 `/mcp`。可用 `--endpoint` 和 `--token` 传参，自动化优先通过启动环境传入 `OC_SERVER_URL` 和 `OC_API_KEY` 后加 `--from-env`，避免 Key 进入命令行历史。只检索使用 `reader`，Run Hook 上报要求写权限。Hook 使用插件自带的 Node.js 实现。
 
-接入脚本核对 API、Key 所属工作区和 MCP 工具，再安装 Agent 插件，保存客户端与 Hook 所需的用户环境和 PATH。Codex 非默认地址通过官方 CLI 配置，已有冲突的 MCP 配置会报错并要求用户处理。接入脚本只使用已有 API，不需要控制台端口。
+接入脚本核对 API、Key 所属工作区和 MCP 工具，再安装 Agent 插件，保存客户端与 Hook 所需的用户环境和 PATH。Codex 非默认地址通过官方 CLI 配置，已有冲突的 MCP 配置会报错并要求用户处理。接入脚本只使用已有 API，负责把 Node.js 放进客户端的 PATH。
 
 Windows 的 Agent 接入仅在用户环境变量 `OC_API_KEY` 中持久化工作空间 Key。默认重装优先读取该用户变量，找不到时使用当前进程环境或提示输入。更新接入配置时，安装器移除旧 Agent 安装记录中的 Key 原文，只保留用于识别已设置值的摘要。卸载清除安装器设置且仍匹配的 Key，保留安装前已有的相同值及后来手工更改的值。主动替换 Key 时会丢弃旧值。
 
@@ -39,19 +39,17 @@ Windows 的 Agent 接入仅在用户环境变量 `OC_API_KEY` 中持久化工作
 
 ## 本地部署 API 和控制台
 
-全新本机实例使用 `--init` 创建工作区。控制台默认使用 `127.0.0.1:3000`，占用时可指定 `--ui-port`。已有工作区时省略 `--init`，输入原 API 地址和 Key。复用已停止的服务时，可用 `--data-dir` 或 `OC_DATA_DIR` 指定原目录。
+本地安装会启动 API 和控制台。控制台默认使用 `127.0.0.1:3000`，可通过 `--ui-port` 修改。复用本地数据时用 `--data-dir` 或 `OC_DATA_DIR` 指定原目录。
 
 ```powershell
-.\bin\origence-deploy.cmd install --init demo --endpoint http://127.0.0.1:8080 --ui-port 3001
+.\bin\origence-deploy.cmd install --endpoint http://127.0.0.1:8080 --ui-port 3001
 ```
 
 ```sh
-./bin/origence-deploy install --init demo --endpoint http://127.0.0.1:8080 --ui-port 3001
+./bin/origence-deploy install --endpoint http://127.0.0.1:8080 --ui-port 3001
 ```
 
-新部署会签发工作空间 Key，并初始化部署管理员账号 `admin` 和随机密码。用管理员账号登录控制台后，可以创建平级工作区、管理各工作区的 Key 并审核全局知识。工作空间 Key 可用于 Agent 或单工作区登录。通过交互输出、`--credentials-file <Git 目录之外的新文件>` 或显式加 `--show-secrets` 获取凭据。已有部署可在运行接入命令时，通过服务端环境变量 `ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY` 提供有效的部署管理员 Key，绑定账号，无需重新初始化。加 `--verify-write` 可创建并从控制台读回一条标记明确的测试 Run，重复执行会复用同一条。
-
-重复执行会复用部署。只有显式执行 `--force --init <名称>` 才会重建工作区，现有数据目录先改名备份。重建前应停止使用该目录的外部服务。
+首次启动自动创建部署管理员。安装器为控制台的 `admin` 账号设置随机密码，通过交互输出、`--credentials-file` 或显式 `--show-secrets` 获取登录信息。用管理员账号创建工作空间，再用该空间的 Key 接入 Agent。已有服务可以用工作空间 Key 接入，也可以设置 `ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY` 以管理员身份安装控制台。`--verify-write` 需要提供有写权限的工作空间 Key。
 
 从仓库运行 `./bin/origence-deploy uninstall` 或 `.\bin\origence-deploy.cmd uninstall`。它停止部署脚本管理的进程，清理其管理的账号配置，并保留数据库、备份、已导出的凭据文件和 Agent 插件。以前的一键安装记录会按所属范围读取，完整撤销旧安装时分别执行两个卸载命令。日志与私有状态位于 Windows 的 `%LOCALAPPDATA%\Origence\installer` 或 Unix 的 `~/.origence/installer`。
 
