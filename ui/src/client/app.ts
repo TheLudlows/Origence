@@ -189,9 +189,9 @@ function login(setupRequired?: true) {
   const username = input("");
   username.required = true;
   username.autocomplete = "username";
-  const heading = el("header", "login-heading", brand(), el("h1", "", "登录控制台"));
+  const heading = el("h1", "login-title", "登录控制台");
   const card = el("section", "login-form");
-  mount.replaceChildren(el("main", "login", card));
+  mount.replaceChildren(el("main", "login", el("div", "login-layout", brand(), card)));
 
   function showForm(useKey: boolean, focus = false) {
     const secret = input(useKey ? "输入工作空间或部署管理员 Key" : "", "", "password");

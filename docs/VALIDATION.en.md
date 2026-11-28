@@ -14,6 +14,11 @@ without configured accounts, and navigation and page layout at widths from 320 t
 At 375px the key sign-in link had text contrast of 7.55:1 in light mode and 10.45:1 in dark mode.
 Its emulated touch target was at least 44×44 CSS px. Windows and live deployments were not exercised.
 
+After adjusting the overview layout and palette on PR #180 based on `6781757`, the same type
+check, 34 UI tests, and four Chromium regressions passed again. At 375px the revised key sign-in
+link measured 7.49:1 in light mode and 10.66:1 in dark mode, with an emulated touch target of at
+least 44×44 CSS px.
+
 ## 2026-11-28 · Installer defaults to archiving private turns for the project
 
 Local verification used a worktree based on main `493e38b`, Windows, Rust 1.98.0, Node 24.15.0, and fresh test databases.
