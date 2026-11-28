@@ -15,19 +15,19 @@ deciding test changes and before delivery. Limit cleanup to the authorized chang
 and its direct consequences, preserving the project rules and compatibility
 commitments below. Pure questions and read-only analysis do not trigger it.
 
-## Current-stage database scope
+## Current-version scope
 
-- Target fresh databases for current design, implementation, testing, and
-  acceptance. Version upgrades, backward compatibility with older database
-  schemas, and data migrations are out of scope; do not track their absence as
-  current gaps or add upgrade/migration work to current milestones.
-- Reconsider this scope only after an explicit future requirement change.
-  Existing compatibility checks, historical tools, and validation records do
-  not create a requirement to extend upgrade or migration support.
-- This scope does not relax durability, restart/retry recovery, same-version
-  backup/restore, source preservation, or incompatible-schema rejection.
-  A fresh-database development target is not permission to delete, overwrite,
-  or silently convert existing data.
+- Design and test the current implementation against fresh databases. When a
+  change replaces an old behavior, update its callers, tests, and documentation
+  to use the new path. Remove superseded branches, aliases, and fallbacks in the
+  same change.
+- Support for superseded behavior, older schemas and data formats, version
+  upgrades, and data migration requires an explicit project requirement.
+  Historical tools, tests, and validation records do not establish one.
+- Preserve current-version durability, restart and retry recovery, backup and
+  restore, source preservation, and rejection of incompatible schemas.
+  Deleting, overwriting, or converting existing data requires separate
+  authorization.
 
 ## SQL query constraints
 

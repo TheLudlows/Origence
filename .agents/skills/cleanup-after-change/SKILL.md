@@ -21,9 +21,8 @@ Make cleanup part of implementation completion. Work within the authorized chang
 - Prefer rg to search old symbols, string names, configuration keys, routes, commands, and documentation references. Determine their purpose using call chains, exports, registries, reflection, plugin discovery, and build configuration.
 - Once the new implementation has taken over and the old behavior is no longer needed, remove the old functions, branches, wrappers, entry points, flags, dependencies, scripts, examples, and comments together.
 - Prefer one implementation for the same behavior. Do not add duplicate implementations, commented-out old code, backup copies, or abstractions for hypothetical needs.
-- Retain compatibility layers, old paths, and fallbacks only for explicit compatibility commitments, actual callers, or unfinished migrations, and record the concrete reason. Preserve fault handling, validation, and boundary handling that still serve a purpose.
-- Do not keep redundant code because it might be useful later. Do not infer that public SDK/API entry points, external commands, deployment configuration, persistent formats, or old-data readers can be deleted merely because the repository contains no references.
-- Preserve historical database migrations, upgrade paths that are still required, and valid historical records. When unresolved questions affect external users or data compatibility, finish the cleanup that can be determined and then explain the remaining questions.
+- Follow the [current-version scope](../../../AGENTS.md#current-version-scope). Move callers and tests in scope to the current path and remove superseded implementation and fixtures. Retain compatibility for superseded behavior or older data only when an explicit project requirement calls for it.
+- Check current public interfaces, deployment behavior, and persistence contracts before removing an entry point. Preserve current-version fault handling, validation, recovery, and historical evidence. Deleting, overwriting, or converting existing data requires separate authorization.
 - Do not remove, overwrite, or revert unrelated user modifications or files. Do not substitute global cleanup or hard resets for item-by-item cleanup.
 
 ## 3. Maintain documentation in place
