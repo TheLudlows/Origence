@@ -14,7 +14,7 @@ The first release targets enterprise engineering and business teams, piloting on
 
 ### Workspace keys and deployment-wide knowledge
 
-- A workspace is the identity for ordinary access. It has one active key for Agents and the console. The key grants business reads and writes in that workspace. Rotation preserves the workspace and archive. A separate administrator identity can read all workspaces, including original conversations.
+- A workspace is the identity for ordinary access. It has one active key for Agents and the console. The key grants business reads and writes in that workspace. Rotation preserves the workspace and archive. The administrator uses a separate account to inspect sessions and Runs and perform operations in the selected workspace.
 - Conversation turns are archived and retained. A workspace key can delete an extracted memory. Extraction uses the existing durable worker and publishes back to the source workspace. Once deleted, a memory must stay deleted if the same source is retried or reprocessed.
 - Each deployment has one shared knowledge space. A workspace submits a fixed version of its knowledge for administrators to approve, reject, or withdraw. Only approved, live versions enter shared recall. A published version identifies its evidence, and private attachments and turns retain their source authorization.
 - Recall includes local memory and knowledge plus live shared knowledge. Results identify scope and version. Extracted memories, private knowledge changes, and Skills are written to their original workspace.

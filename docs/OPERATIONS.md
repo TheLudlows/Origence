@@ -52,7 +52,7 @@ Cargo.lock 保持兼容的 office_oxide 0.1.9；0.1.13 的 DocumentIR 字段变�
 
 ## 初始化与凭据
 
-新库先执行 `origence --offline workspace-create --workspace-key NAME` 签发工作空间 Key，再执行 `origence --offline deployment-admin-rotate` 签发部署管理员 Key。保存两项凭据后启动宿主。单 Key 工作空间用 `workspace-key-rotate` 离线轮换。成员授权模式的密钥及其他空间授权见 [身份与密钥管理](API.md#身份与密钥管理)。离线管理依赖操作系统授权，必须独占数据目录。
+新库先执行 `origence --offline workspace-create --workspace-key NAME` 签发工作空间 Key，再执行 `origence --offline deployment-admin-rotate` 签发部署管理员 Key。保存两项凭据后启动宿主。单 Key 工作空间用 `workspace-key-rotate` 离线轮换。旧工作区的凭据管理见 [身份与密钥管理](API.md#身份与密钥管理)。离线管理依赖操作系统授权，必须独占数据目录。
 
 程序读取进程环境变量，不自动读取 `.env`；Compose 会读取 `.env`。模型凭据、API token 和 `.env` 不应进入 Git。命令参数以 origence --help 为准；本地模型配置见下节。
 

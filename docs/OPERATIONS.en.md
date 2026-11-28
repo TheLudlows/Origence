@@ -46,7 +46,7 @@ The old implementation used a subprocess to terminate parsing after a hard 30-se
 
 ## Initialization and credentials
 
-For a fresh database, run `origence --offline workspace-create --workspace-key NAME` to issue a workspace key, then `origence --offline deployment-admin-rotate` to issue the deployment administrator key. Save both credentials before starting the host. Rotate single-workspace keys offline with `workspace-key-rotate`. The [identity and credential management reference](API.en.md#identity-and-credential-management) covers role-based credentials and grants. Offline administration uses OS authorization and needs exclusive access to the data directory.
+For a fresh database, run `origence --offline workspace-create --workspace-key NAME` to issue a workspace key, then `origence --offline deployment-admin-rotate` to issue the deployment administrator key. Save both credentials before starting the host. Rotate single-workspace keys offline with `workspace-key-rotate`. The [identity and credential management reference](API.en.md#identity-and-credential-management) covers legacy workspace credentials. Offline administration uses OS authorization and needs exclusive access to the data directory.
 
 Origence reads process environment variables. It does not load `.env` automatically. Compose reads `.env`. Keep model credentials, API tokens, and `.env` out of Git. See origence --help for command arguments and the next section for local model setup.
 
