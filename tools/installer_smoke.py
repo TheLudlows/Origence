@@ -220,15 +220,15 @@ def smoke(binary, claude, codex, root, browser):
         first = installer(env, ["install", *deploy_args, "--init", "Installer synthetic", "--verify-write",
                                 "--credentials-file", str(output)], forbidden, entry=deploy_cmd, cwd=root)
         credentials = json.loads(output.read_text(encoding="utf-8"))
-        forbidden = [credentials["token"], credentials["deployment_admin_key"]]
+        forbidden = [credentials["token"], credentials["deployment_admin_key"], credentials["password"]]
         sanitized(first, forbidden)
-        require(credentials["login_mode"] == "workspace" and credentials["role"] == "workspace"
-                and "password" not in credentials and first["console-session"]["status"] == "success"
+        require(credentials["login_mode"] == "deployment" and credentials["role"] == "workspace"
+                and credentials["username"] == "admin" and first["console-session"]["status"] == "success"
                 and first["deployment-admin-session"]["status"] == "success",
-                "Fresh deployment must provision the workspace and deployment administrator Keys")
-        require(not (state.parent / "console-accounts.db").exists()
+                "Fresh deployment must provision the workspace Key and deployment administrator account")
+        require((state.parent / "console-accounts.db").is_file()
                 and not Path(env["ORIGENCE_UI_ACCOUNTS_DB"]).exists(),
-                "A fresh deployment must not create or require a console account database")
+                "Fresh deployment must use its managed console account database")
         require("claude-code" not in first and "codex" not in first and "agent" not in json.loads(state.read_text(encoding="utf-8")),
                 "Deployment must not configure either agent")
         if WINDOWS:
@@ -351,7 +351,7 @@ def smoke(binary, claude, codex, root, browser):
                 replacement["whoami"]["detail"]["workspace_id"] != credentials["workspace_id"],
                 "Force plus init must preserve the original data and bind the new workspace")
         config = json.loads(state.read_text(encoding="utf-8"))["deploy"]["config"]
-        forbidden.append(config["token"])
+        forbidden.extend([config["token"], config["deploymentKey"], config["password"]])
         sanitized(replacement, forbidden)
         new_env = dict(env, OC_SERVER_URL=endpoint, OC_API_KEY=config["token"])
         if WINDOWS:

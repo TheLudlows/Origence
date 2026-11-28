@@ -179,7 +179,6 @@ test("key management uses the selected account admin grant and protects its cred
     body: JSON.stringify({ username: "fixture", password }),
   });
   const { session } = await login.json();
-  assert.equal(session.workspaces.find((workspace) => workspace.workspace_id === adminWorkspace).can_create_owned_workspaces, true);
   assert.equal(session.workspaces.find((workspace) => workspace.workspace_id === child).role, "reader");
   const headers = { Cookie: login.headers.get("Set-Cookie").split(";")[0], "X-Origence-Session": session.binding,
     "X-Origence-Workspace": adminWorkspace, Authorization: "Bearer untrusted-browser-value" };
@@ -199,12 +198,11 @@ test("key management uses the selected account admin grant and protects its cred
   assert.equal((await fetch(agents, { method: "POST", headers })).status, 404);
   const create = { method: "PUT", headers: { ...headers, Origin: ui, "Content-Type": "application/json" }, body: JSON.stringify({ name: "New child" }) };
   const path = `/v1/workspaces/owned/${child}`;
-  assert.equal((await fetch(ui + "/api" + path, create)).status, 200);
-  assert.equal((await fetch(ui + "/api" + path, { ...create, headers: { ...create.headers, "X-Origence-Workspace": child } })).status, 403);
+  assert.equal((await fetch(ui + "/api" + path, create)).status, 404);
+  assert.equal((await fetch(ui + `/api/admin/deployment/workspaces/${child}`, create)).status, 403);
   assert.deepEqual(calls, [
     ["/admin/keys?limit=1", "GET", "Bearer synthetic-admin", adminWorkspace, undefined],
     ["/admin/agents", "GET", "Bearer synthetic-admin", adminWorkspace, undefined],
-    [path, "PUT", "Bearer synthetic-admin", undefined, undefined],
   ]);
 });
 

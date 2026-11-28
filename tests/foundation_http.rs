@@ -451,93 +451,73 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
 }
 
 #[tokio::test]
-async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
+async fn deployment_admin_provisions_peer_workspaces_and_manages_scoped_keys() {
     let dir = tempfile::tempdir().unwrap();
     let service = open_service(dir.path(), Models::disabled()).await.unwrap();
     let store = service.engine.relational();
-    let root = Scope {
+    let member = Scope {
         tenant_id: Uuid::new_v4(),
         workspace_id: Uuid::new_v4(),
     };
-    let other = Scope {
-        tenant_id: Uuid::new_v4(),
-        workspace_id: Uuid::new_v4(),
-    };
-    for scope in [root, other] {
-        store
-            .create_workspace(scope.tenant_id, scope.workspace_id, "Root")
-            .await
-            .unwrap();
-    }
-    let allow = origence::storage::KeyCapabilities {
-        allow_owned_workspaces: true,
-    };
-    let manager = store
-        .issue_key_with_capabilities(root, "admin", allow)
+    store
+        .create_workspace(member.tenant_id, member.workspace_id, "Members")
         .await
         .unwrap();
-    let other_manager = store
-        .issue_key_with_capabilities(other, "admin", allow)
-        .await
-        .unwrap();
-    let ordinary = store.issue_key(root, "admin").await.unwrap();
-    let writer = store
-        .issue_key_with_capabilities(root, "writer", allow)
-        .await
-        .unwrap();
-
+    let member_admin = store.issue_key(member, "admin").await.unwrap();
+    let admin = store.rotate_deployment_admin().await.unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let serve =
         tokio::spawn(axum::serve(listener, origence::api::router(service.clone())).into_future());
     let http = reqwest::Client::new();
+    let path = "/admin/deployment/workspaces";
+    let workspace = Uuid::new_v4();
+    let destination = format!("{path}/{workspace}");
     let call = |method, path: &str, token: &str| {
         http.request(method, format!("{base}{path}"))
             .bearer_auth(token)
     };
+    let create = |token: &str, name: &str| {
+        call(Method::PUT, &destination, token)
+            .json(&json!({"name":name}))
+            .send()
+    };
 
-    let child = Uuid::from_u128(100);
-    let second = Uuid::from_u128(200);
-    let path = format!("/v1/workspaces/owned/{child}");
-    {
-        let key = &writer.token;
-        assert_eq!(
-            call(Method::PUT, &path, key)
-                .json(&json!({"name":"试点"}))
-                .send()
-                .await
-                .unwrap()
-                .status(),
-            StatusCode::FORBIDDEN
-        );
-        assert_eq!(
-            call(Method::GET, "/v1/workspaces/owned", key)
-                .send()
-                .await
-                .unwrap()
-                .status(),
-            StatusCode::FORBIDDEN
-        );
-    }
-    for (id, name) in [(child, "试点"), (second, "Second"), (child, "试点")] {
-        let receipt = call(
+    assert_eq!(
+        create(&member_admin.token, "Independent")
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        call(
             Method::PUT,
-            &format!("/v1/workspaces/owned/{id}"),
-            &manager.token,
+            &format!("/v1/workspaces/owned/{workspace}"),
+            &member_admin.token
         )
-        .json(&json!({"name":name}))
+        .json(&json!({"name":"Child"}))
         .send()
         .await
         .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json::<Value>()
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    let first = create(&admin, "Independent")
         .await
+        .unwrap()
+        .error_for_status()
         .unwrap();
-        assert_eq!(receipt["workspace_id"], json!(id));
-    }
-    let list = |path: String, token: &str| call(Method::GET, &path, token).send();
-    let first_page: Value = list("/v1/workspaces/owned?limit=1".into(), &manager.token)
+    assert_eq!(first.headers()["cache-control"], "no-store");
+    let first: Value = first.json().await.unwrap();
+    assert_eq!(first["workspace_id"], json!(workspace));
+    assert_eq!(first["created"], true);
+    let key = first["key"]["token"].as_str().unwrap();
+    let before = service.auth(key).await.unwrap();
+    assert_eq!(before.workspace_id, workspace);
+    assert_eq!(before.role, "workspace");
+    let session = service.private_session(&before).await.unwrap();
+    let replay: Value = create(&admin, "Independent")
         .await
         .unwrap()
         .error_for_status()
@@ -546,13 +526,95 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
         .await
         .unwrap();
     assert_eq!(
-        first_page,
-        json!({"items":[{"workspace_id":child,"name":"试点","role":"writer"}],"next_after":child})
+        replay,
+        json!({"workspace_id":workspace,"name":"Independent","created":false})
     );
-    let last_page: Value = list(
-        format!("/v1/workspaces/owned?limit=1&after={child}"),
-        &manager.token,
+    assert_eq!(
+        create(&admin, "Different").await.unwrap().status(),
+        StatusCode::CONFLICT
+    );
+
+    let list: Value = call(Method::GET, &format!("{destination}/keys"), &admin)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(list["single_key"], true);
+    assert_eq!(list["items"][0]["key_id"], first["key"]["key_id"]);
+    assert!(!list.to_string().contains(key));
+    let rotate = format!("{destination}/keys/rotate");
+    assert_eq!(
+        call(Method::POST, &rotate, key)
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let replacement: Value = call(Method::POST, &rotate, &admin)
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(service.auth(key).await.is_err());
+    let after = service
+        .auth(replacement["token"].as_str().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(service.private_session(&after).await.unwrap(), session);
+
+    let peer_keys = format!("{path}/{}/keys", member.workspace_id);
+    let issued: Value = call(Method::POST, &peer_keys, &admin)
+        .json(&json!({"workspace_id":member.workspace_id,"role":"writer"}))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let writer = service
+        .auth(issued["token"].as_str().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(writer.workspace_id, member.workspace_id);
+    assert_eq!(writer.role, "writer");
+    assert_eq!(
+        call(Method::POST, &format!("{destination}/keys"), &admin)
+            .json(&json!({"workspace_id":workspace,"role":"writer"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        call(
+            Method::DELETE,
+            &format!("{peer_keys}/{}", first["key"]["key_id"].as_str().unwrap()),
+            &admin
+        )
+        .send()
+        .await
+        .unwrap()
+        .status(),
+        StatusCode::NOT_FOUND
+    );
+    let rotated: Value = call(
+        Method::POST,
+        &format!("{peer_keys}/{}/rotate", writer.id),
+        &admin,
     )
+    .send()
     .await
     .unwrap()
     .error_for_status()
@@ -560,233 +622,25 @@ async fn owned_workspaces_http_create_list_and_scope_are_authorized() {
     .json()
     .await
     .unwrap();
-    assert_eq!(
-        last_page,
-        json!({"items":[{"workspace_id":second,"name":"Second","role":"writer"}],"next_after":null})
-    );
-    let empty: Value = list("/v1/workspaces/owned".into(), &other_manager.token)
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(empty["items"], json!([]));
-
-    let ordinary_child = Uuid::from_u128(300);
-    let ordinary_path = format!("/v1/workspaces/owned/{ordinary_child}");
-    for name in ["Ordinary child", "Retry with a different name"] {
-        assert_eq!(
-            call(Method::PUT, &ordinary_path, &ordinary.token)
-                .json(&json!({"name":name}))
-                .send()
-                .await
-                .unwrap()
-                .status(),
-            StatusCode::OK
-        );
-    }
-    let ordinary_page: Value = list("/v1/workspaces/owned?limit=1".into(), &ordinary.token)
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(
-        ordinary_page,
-        json!({"items":[{"workspace_id":ordinary_child,"name":"Ordinary child","role":"writer"}],"next_after":null})
-    );
-    let creator: Value = call(Method::GET, "/v1/whoami", &ordinary.token)
-        .header("X-Origence-Workspace", ordinary_child.to_string())
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(creator["role"], "writer");
-    let delegated_child = Uuid::from_u128(400);
-    let delegated = store.issue_key(root, "reader").await.unwrap();
-    let delegated_root = Scope {
-        workspace_id: Uuid::new_v4(),
-        ..root
-    };
-    store
-        .create_workspace(
-            root.tenant_id,
-            delegated_root.workspace_id,
-            "Delegated root",
-        )
-        .await
-        .unwrap();
-    let delegated_root_admin = store.issue_key(delegated_root, "admin").await.unwrap();
     call(
-        Method::PUT,
-        &format!("/admin/workspace-key-grants/{}", delegated.key_id),
-        &delegated_root_admin.token,
+        Method::DELETE,
+        &format!("{peer_keys}/{}", rotated["key_id"].as_str().unwrap()),
+        &admin,
     )
-    .json(&json!({"role":"admin"}))
     .send()
     .await
     .unwrap()
     .error_for_status()
     .unwrap();
-    call(
-        Method::PUT,
-        &format!("/v1/workspaces/owned/{delegated_child}"),
-        &delegated.token,
-    )
-    .header(
-        "X-Origence-Workspace",
-        delegated_root.workspace_id.to_string(),
-    )
-    .json(&json!({"name":"Delegated child"}))
-    .send()
-    .await
-    .unwrap()
-    .error_for_status()
-    .unwrap();
-    assert_eq!(
-        call(Method::PUT, &path, &ordinary.token)
-            .json(&json!({"name":"Existing inaccessible child"}))
-            .send()
+    assert!(
+        service
+            .auth(rotated["token"].as_str().unwrap())
             .await
-            .unwrap()
-            .status(),
-        StatusCode::FORBIDDEN
+            .is_err()
     );
-
-    let scoped = |method, path: &str, token: &str| {
-        call(method, path, token).header("X-Origence-Workspace", child.to_string())
-    };
-    let username: Value = scoped(Method::GET, "/v1/whoami", &manager.token)
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(username["workspace_id"], json!(child));
-    assert_eq!(username["id"], json!(manager.key_id));
-    assert_eq!(username["role"], "writer");
+    store.rotate_deployment_admin().await.unwrap();
     assert_eq!(
-        scoped(Method::GET, "/v1/whoami", &ordinary.token)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::FORBIDDEN
-    );
-    let child_admin = store
-        .issue_key(
-            Scope {
-                workspace_id: child,
-                ..root
-            },
-            "admin",
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        call(
-            Method::PUT,
-            &format!("/v1/workspaces/owned/{}", Uuid::new_v4()),
-            &child_admin.token
-        )
-        .json(&json!({"name":"Grandchild"}))
-        .send()
-        .await
-        .unwrap()
-        .status(),
-        StatusCode::FORBIDDEN
-    );
-    call(
-        Method::PUT,
-        &format!("/admin/workspace-key-grants/{}", ordinary.key_id),
-        &child_admin.token,
-    )
-    .json(&json!({"role":"reader"}))
-    .send()
-    .await
-    .unwrap()
-    .error_for_status()
-    .unwrap();
-    let granted: Value = scoped(Method::GET, "/v1/whoami", &ordinary.token)
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(granted["workspace_id"], json!(child));
-    assert_eq!(granted["id"], json!(ordinary.key_id));
-    assert_eq!(granted["role"], "reader");
-    assert_eq!(
-        scoped(Method::GET, "/v1/whoami", &other_manager.token)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::NOT_FOUND
-    );
-    assert_eq!(
-        scoped(Method::POST, "/admin/keys", &manager.token)
-            .json(&json!({"workspace_id":child,"role":"admin"}))
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::FORBIDDEN
-    );
-    assert_eq!(
-        scoped(
-            Method::PUT,
-            &format!("/v1/workspaces/owned/{}", Uuid::new_v4()),
-            &manager.token
-        )
-        .json(&json!({"name":"Grandchild"}))
-        .send()
-        .await
-        .unwrap()
-        .status(),
-        StatusCode::FORBIDDEN
-    );
-
-    let run = Uuid::new_v4();
-    let run_path = format!("/v1/runs/{run}");
-    scoped(Method::POST, "/v1/runs", &manager.token)
-        .json(&json!({"run_id":run,"summary":"private child run"}))
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-    assert_eq!(
-        call(Method::GET, &run_path, &manager.token)
-            .send()
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::NOT_FOUND
-    );
-    scoped(Method::GET, &run_path, &manager.token)
-        .send()
-        .await
-        .unwrap()
-        .error_for_status()
-        .unwrap();
-    store.revoke_key(manager.key_id).await.unwrap();
-    assert_eq!(
-        scoped(Method::GET, &run_path, &manager.token)
+        call(Method::POST, &rotate, &admin)
             .send()
             .await
             .unwrap()

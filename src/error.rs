@@ -13,6 +13,7 @@ impl From<crate::storage::StorageError> for AppError {
         match error {
             S::InvalidArgument(message) => Self::Invalid(message.into()),
             S::NotFound => Self::NotFound,
+            S::Unauthorized => Self::Unauthorized,
             S::Forbidden | S::ScopeRequired => Self::Forbidden,
             S::Conflict(message) => Self::Conflict(message),
             S::Unavailable(_) | S::NotInitialized => {

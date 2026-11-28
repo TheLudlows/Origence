@@ -49,7 +49,7 @@ Use `--init` for a fresh local workspace. The console defaults to `127.0.0.1:300
 ./bin/origence-deploy install --init demo --endpoint http://127.0.0.1:8080 --ui-port 3001
 ```
 
-Fresh deployment issues a workspace key and a separate deployment administrator key, then verifies both console sign-ins. The workspace key is also the Agent credential. The administrator key can inspect the deployment and moderate global knowledge. Obtain both newly issued keys through interactive initialization, `--credentials-file <new path outside Git>`, or an explicit `--show-secrets`. Operators can rotate the administrator key offline. Existing role-based credentials continue to support account sign-in. Add `--verify-write` to record and read one labeled test Run through the console. Reruns use the same probe Run.
+Fresh deployment issues a workspace key and initializes the `admin` deployment account with a generated password. The account manages peer workspaces, their keys, and global knowledge review. Use the workspace key for an Agent or single-workspace sign-in. Obtain the initial credentials through interactive initialization, `--credentials-file <new path outside Git>`, or an explicit `--show-secrets`. To bind an existing deployment account without reinitializing, provide a valid deployment key through the server-side environment variable `ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY` when running deployment setup. Add `--verify-write` to record and read one labeled test Run through the console. Reruns use the same probe Run.
 
 Repeated commands reuse the deployment. Only an explicit `--force --init <name>` replaces the workspace. It renames an existing data directory to a backup first. Stop any external services using that directory before reinitializing.
 

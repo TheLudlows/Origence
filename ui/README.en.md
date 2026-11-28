@@ -23,7 +23,7 @@ Run `origence --offline workspace-create --workspace-key <name>` while the host 
 
 When console accounts are configured, the sign-in page opens with the username and password fields. Select **用 Key 登录** below the form to use a workspace key or deployment administrator key. A deployment without console accounts opens directly to the key field.
 
-The console started by `origence-deploy install --init <name>` uses key sign-in and needs no account database. For a manual start, use `npm start -- --key-only`.
+The console started by `origence-deploy install --init <name>` configures an initial deployment administrator account. Workspace keys can also be used to sign in. For a manual key-only start, use `npm start -- --key-only`.
 
 ### Deployment administrator
 
@@ -54,9 +54,9 @@ After sign-in, the sidebar lists every workspace the account can access and high
 
 An eight-hour in-memory console session survives page reloads. The browser receives a random HttpOnly, SameSite=Strict cookie. HTTPS also enables Secure. The tab stores only the selected workspace ID in sessionStorage. Sign-out, expiry, or Node restart requires login again.
 
-### Create a child workspace
+### Create a workspace
 
-In an existing membership-based workspace, sign in as the root workspace admin, select the root, and use **新建工作区** to enter a name. The console refreshes the list and switches to the new workspace, where the creator has writer access. Ordinary administrators access other children through explicit grants. Trusted root credentials with `allow_owned_workspaces` can access all immediate children. Operators initialize new root workspaces offline.
+Sign in as the deployment administrator, select **新建工作区**, and enter a name. Save the workspace key issued on creation. The deployment view lists each workspace as a peer. Open **API Key** in a workspace to rotate its single key or manage credentials and grants in a membership-based workspace. The same administrator can open Global Knowledge Review.
 
 After making development changes, run `npm run build`. `npm run dev` watches build output and restarts the service. The server also accepts `--host` and `--port` to work with existing preview tools.
 

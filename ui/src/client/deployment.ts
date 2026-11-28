@@ -1,21 +1,80 @@
 import { api } from "./api.js";
-import { button, code, cursor, el, heading, message, paged, panel, short } from "./components.js";
+import { button, code, cursor, el, field, form, heading, input, message, paged, panel, short, submit } from "./components.js";
 import type { Asset, Page, Run, RunEvent } from "./types.js";
 import { globalReviewPage } from "./global-knowledge.js";
+import { keysPage } from "./keys.js";
 
 const prefix = "/admin/deployment/workspaces";
 type Workspace = { workspace_id: string; name: string };
 type Turn = { question: string; answer: string };
+type IssuedKey = { key_id: string; token: string };
 
 export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout: () => Promise<void>) {
   const workspaceList = el("div"), content = el("main", "content");
   const title = "部署管理";
   root.replaceChildren(el("div", "shell", el("aside", "sidebar",
     button("全局知识审核", reviews, "workspace-item"),
+    button("新建工作区", createWorkspace, "workspace-item"),
     el("h2", "", "工作空间"), workspaceList, button("退出", logout, "sidebar-exit"),
   ), el("div", "workspace-main", content)));
   content.append(heading(title, "选择工作空间，查看其会话、运行和已发布内容。"));
   let selected: AbortController | undefined;
+  let listRequest: AbortController | undefined;
+
+  function revealKey(target: HTMLElement, key: IssuedKey) {
+    const token = input("", key.token);
+    token.readOnly = true;
+    token.autocomplete = "off";
+    token.spellcheck = false;
+    target.replaceChildren(
+      el("p", "muted", "Key 明文仅显示一次，请保存到凭据管理工具。"),
+      field("新工作区 Key", token),
+    );
+    token.focus();
+    token.select();
+  }
+
+  function createWorkspace() {
+    selected?.abort();
+    selected = new AbortController();
+    const requestSignal = AbortSignal.any([signal, selected.signal]);
+    const name = input("输入工作区名称");
+    name.required = true;
+    name.maxLength = 256;
+    const create = submit("创建工作区");
+    const result = el("div");
+    let attempt: { id: string; name: string } | undefined;
+    const request = form(async () => {
+      if (create.disabled) return;
+      create.disabled = true;
+      result.replaceChildren();
+      try {
+        const value = name.value.trim();
+        if (!value || new TextEncoder().encode(value).length > 256)
+          throw new Error("请输入工作区名称，最多 256 字节");
+        if (attempt?.name !== value) attempt = { id: crypto.randomUUID(), name: value };
+        const { key, ...workspace } = await api.request<Workspace & { key?: IssuedKey }>(`${prefix}/${attempt.id}`, {
+          method: "PUT", data: { name: value }, signal: requestSignal,
+        });
+        if (requestSignal.aborted) return;
+        request.remove();
+        refreshWorkspaces();
+        const info = el("div");
+        result.replaceChildren(
+          el("p", "", `已创建「${workspace.name}」。`), info,
+          button("打开工作区", () => select(workspace)),
+        );
+        if (key) revealKey(info, key);
+        else info.append(el("p", "muted", "如未收到首次签发的 Key，请打开工作区轮换。"));
+      } catch (error) {
+        if (!requestSignal.aborted) message(result, error);
+      } finally {
+        create.disabled = false;
+      }
+    }, field("工作区名称", name), create);
+    content.replaceChildren(heading("新建工作区", "创建独立工作区并签发它的 Key。"), panel("工作区", request, result));
+    name.focus();
+  }
 
   function reviews() {
     selected?.abort();
@@ -70,12 +129,54 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
     const assets = (kind: "memory" | "knowledge", label: string) => show(label, (target, viewSignal) =>
       paged<Asset, string>(target, viewSignal, (after) => api.get<Page<Asset>>(cursor(`${base}/assets?kind=${kind}`, after), viewSignal),
         (asset) => button(asset.title, () => openAsset(asset), "link")));
+    const keys = () => show("API Key", (target, viewSignal) => {
+      const result = el("div");
+      target.append(result);
+      void api.get<{ single_key: boolean; items: { key_id: string }[] }>(`${base}/keys?limit=1`, viewSignal).then((page) => {
+        if (viewSignal.aborted) return;
+        if (!page.single_key) {
+          target.replaceChildren();
+          keysPage(target, { role: "admin", signal: viewSignal, navigate() {} }, workspace, base);
+          return;
+        }
+        const state = el("p", "muted", page.items[0]?.key_id ?? "暂无有效 Key");
+        const rotate = button("轮换工作区 Key", async () => {
+          if (rotate.disabled || !window.confirm("轮换后，旧 Key 将立即失效。继续？")) return;
+          rotate.disabled = true;
+          result.replaceChildren();
+          try {
+            const key = await api.request<IssuedKey>(`${base}/keys/rotate`, { method: "POST", signal: viewSignal });
+            if (!viewSignal.aborted) {
+              state.textContent = key.key_id;
+              revealKey(result, key);
+            }
+          } catch (error) {
+            if (!viewSignal.aborted) message(result, error);
+          } finally {
+            rotate.disabled = false;
+          }
+        });
+        target.insertBefore(state, result);
+        target.insertBefore(rotate, result);
+      }).catch((error: unknown) => {
+        if (!viewSignal.aborted) message(result, error);
+      });
+    });
     content.replaceChildren(heading(workspace.name, workspace.workspace_id), el("nav", "actions",
       button("会话", sessions), button("运行", runs),
-      button("记忆", () => assets("memory", "记忆")), button("知识", () => assets("knowledge", "知识"))), view);
+      button("记忆", () => assets("memory", "记忆")), button("知识", () => assets("knowledge", "知识")),
+      button("API Key", keys)), view);
     sessions();
   }
 
-  paged<Workspace, string>(workspaceList, signal, (after) => api.get<Page<Workspace>>(cursor(prefix, after), signal),
-    (workspace) => button(workspace.name, () => select(workspace), "workspace-item"));
+  function refreshWorkspaces() {
+    listRequest?.abort();
+    listRequest = new AbortController();
+    const listSignal = AbortSignal.any([signal, listRequest.signal]);
+    workspaceList.replaceChildren();
+    paged<Workspace, string>(workspaceList, listSignal, (after) => api.get<Page<Workspace>>(cursor(prefix, after), listSignal),
+      (workspace) => button(workspace.name, () => select(workspace), "workspace-item"));
+  }
+
+  refreshWorkspaces();
 }

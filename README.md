@@ -34,7 +34,7 @@ export OC_DATA_DIR="$(mktemp -d)"
 ```
 
 Use the key returned by `workspace-create` to sign into the workspace or connect an Agent.
-The separate deployment administrator key can inspect all workspaces and moderate global knowledge.
+The deployment administrator can create peer workspaces, manage their keys, and moderate global knowledge.
 Origence opens the embedded AnySeek catalog under `$OC_DATA_DIR/anyseek` and
 initializes workspace collections on first use.
 

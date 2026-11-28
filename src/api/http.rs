@@ -9,7 +9,7 @@ use axum::{
     extract::{DefaultBodyLimit, Path, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
-    routing::{get, post, put},
+    routing::{get, post},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -30,7 +30,6 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/v1/whoami", get(whoami))
         .route("/v1/workspaces", get(workspaces))
         .route("/v1/workspaces/owned", get(list_owned_workspaces))
-        .route("/v1/workspaces/owned/{id}", put(create_owned_workspace))
         .route("/v1/session", get(private_session))
         .route("/admin/keys/{id}/rotate", post(rotate_key))
         .route("/admin/keys", get(list_keys).post(issue_key))
@@ -514,23 +513,6 @@ async fn list_owned_workspaces(
     ))
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct OwnedWorkspaceInput {
-    name: String,
-}
-
-async fn create_owned_workspace(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Path(id): Path<Uuid>,
-    Json(input): Json<OwnedWorkspaceInput>,
-) -> Result<Json<Value>> {
-    Ok(Json(
-        s.create_managed_workspace(&auth(&s, &h).await?, id, &input.name)
-            .await?,
-    ))
-}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WorkspaceGrantInput {

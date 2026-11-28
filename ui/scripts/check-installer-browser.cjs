@@ -8,7 +8,11 @@ async function main() {
     const page = await browser.newPage();
     page.setDefaultTimeout(10_000);
     await page.goto(ui + "/#runs/" + run);
-    await page.getByLabel("访问 Key", { exact: true }).fill(token);
+    const key = page.getByLabel("访问 Key", { exact: true });
+    const keyLogin = page.getByRole("button", { name: "用 Key 登录", exact: true });
+    await key.or(keyLogin).waitFor();
+    if (await keyLogin.isVisible()) await keyLogin.click();
+    await key.fill(token);
     await page.getByRole("button", { name: "使用 Key 登录", exact: true }).click();
     await page.getByText("Claude Code prompt (hook metadata only)", { exact: true }).waitFor();
     await page.getByRole("cell", { name: "claude_code_hook", exact: true }).waitFor();

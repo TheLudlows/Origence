@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
+  deploymentKeyPattern,
   passwordMatches,
   validPasswordInput,
   workspaceIdPattern,
@@ -16,7 +17,6 @@ const loginWindowMs = 10 * 60 * 1000;
 const cookieIdPattern = /^[A-Za-z0-9_-]{43}$/;
 const roleNames = new Set(["reader", "writer", "admin", "workspace"]);
 const workspaceKeyPattern = /^oc_[a-f0-9]{64}$/;
-const deploymentKeyPattern = /^oc_admin_[a-f0-9]{64}$/;
 const loopbackHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 interface Session {
@@ -36,7 +36,6 @@ interface WorkspaceRoute {
   principalId: string;
   role: string;
   scopedWorkspace?: string;
-  canCreateOwned?: boolean;
 }
 
 export interface OwnedWorkspace {
@@ -183,7 +182,7 @@ export class ConsoleSessions {
     const payload = await loginPayload(req);
     const { session, identity } = Object.hasOwn(payload, "workspace_key") || Object.hasOwn(payload, "deployment_key")
       ? await this.keySession(payload, origin, signal)
-      : { session: await this.accountSession(payload, origin), identity: undefined };
+      : { session: await this.accountSession(payload, origin, signal), identity: undefined };
     const profile = await this.profile(session, signal, identity);
     signal.throwIfAborted();
     const now = Date.now();
@@ -218,8 +217,6 @@ export class ConsoleSessions {
       if (user.role !== "admin") continue;
       const owned = await this.listOwned(grant.authorization, signal);
       if (owned === null) continue;
-      workspace.can_create_owned_workspaces = true;
-      route.canCreateOwned = true;
       for (const child of owned) {
         if (directIds.has(child.workspace_id) || routes.has(child.workspace_id)) continue;
         workspaces.push({ ...child, id: user.id });
@@ -236,7 +233,7 @@ export class ConsoleSessions {
     return { account: session.account, binding: session.binding, workspaces };
   }
 
-  private async accountSession(payload: Record<string, unknown>, origin: URL): Promise<Session> {
+  private async accountSession(payload: Record<string, unknown>, origin: URL, signal: AbortSignal): Promise<Session> {
     const { username, password } = payload;
     if (typeof username !== "string" || username.length > 64 || !validPasswordInput(password))
       throw new HttpError(400, "无效的登录请求");
@@ -258,6 +255,14 @@ export class ConsoleSessions {
       if (!(await passwordMatches(password, account?.passwordHash ?? this.dummyHash)) || !account)
         throw new HttpError(401, "账号或密码错误");
       this.attempts.delete(bucket);
+      const authorization = account.deploymentAuthorization;
+      if (authorization) {
+        if (!await this.identifyDeployment(authorization, signal))
+          throw new HttpError(401, "部署管理员凭据已失效");
+        const session = this.session(account.username, [], origin, "deployment");
+        session.deploymentAuthorization = authorization;
+        return session;
+      }
       return this.session(account.username, account.grants, origin);
     } finally {
       this.verifying--;

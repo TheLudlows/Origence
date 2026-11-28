@@ -1,12 +1,6 @@
 //! RelationalStore entry points: authentication, workspaces and API keys.
 use super::*;
 
-enum OwnedWorkspaceAuthorization {
-    Capability(Permission),
-    #[cfg(feature = "local-storage")]
-    Administrator,
-}
-
 impl RelationalStore for SqliteStore {
     type Tx = SqliteTx;
 
@@ -100,14 +94,9 @@ impl RelationalStore for SqliteStore {
         workspace_id: Uuid,
         name: &str,
     ) -> StorageResult<AuthorizedScope> {
-        self.owned_workspace(
-            auth,
-            workspace_id,
-            Some(name),
-            OwnedWorkspaceAuthorization::Capability(Permission::Write),
-        )
-        .await?
-        .ok_or(StorageError::NotFound)
+        self.owned_workspace(auth, workspace_id, Some(name), Permission::Write)
+            .await?
+            .ok_or(StorageError::NotFound)
     }
 
     async fn lookup_owned_workspace(
@@ -115,13 +104,8 @@ impl RelationalStore for SqliteStore {
         auth: AuthorizedScope,
         workspace_id: Uuid,
     ) -> StorageResult<Option<AuthorizedScope>> {
-        self.owned_workspace(
-            auth,
-            workspace_id,
-            None,
-            OwnedWorkspaceAuthorization::Capability(Permission::Read),
-        )
-        .await
+        self.owned_workspace(auth, workspace_id, None, Permission::Read)
+            .await
     }
 
     async fn revoke_key(&self, key_id: Uuid) -> StorageResult<()> {
@@ -199,29 +183,12 @@ impl SqliteStore {
         Ok(rows)
     }
 
-    #[cfg(feature = "local-storage")]
-    pub(crate) async fn create_managed_workspace(
-        &self,
-        auth: AuthorizedScope,
-        workspace_id: Uuid,
-        name: &str,
-    ) -> StorageResult<AuthorizedScope> {
-        self.owned_workspace(
-            auth,
-            workspace_id,
-            Some(name),
-            OwnedWorkspaceAuthorization::Administrator,
-        )
-        .await?
-        .ok_or(StorageError::NotFound)
-    }
-
     async fn owned_workspace(
         &self,
         auth: AuthorizedScope,
         workspace_id: Uuid,
         create: Option<&str>,
-        authorization: OwnedWorkspaceAuthorization,
+        permission: Permission,
     ) -> StorageResult<Option<AuthorizedScope>> {
         if create
             .is_some_and(|name| name.trim().is_empty() || name.len() > 256 || name.contains('\0'))
@@ -230,29 +197,12 @@ impl SqliteStore {
                 "workspace name must contain 1..256 UTF-8 bytes without NUL",
             ));
         }
-        let required = match authorization {
-            #[cfg(feature = "local-storage")]
-            OwnedWorkspaceAuthorization::Administrator => Some(Permission::WorkspaceAdmin),
-            OwnedWorkspaceAuthorization::Capability(_) => None,
-        };
-        let mut tx = self.begin_scoped(auth, create.is_some(), required).await?;
-        let (role, explicit_key): (&str, Option<Uuid>) = match authorization {
-            #[cfg(feature = "local-storage")]
-            OwnedWorkspaceAuthorization::Administrator => {
-                tx.require_root_workspace().await?;
-                let (logical_id, home, _, active, capable) = tx.managed_workspace_key().await?;
-                let derived = home == tx.scope.workspace_id && active && capable;
-                ("writer", (!derived).then_some(logical_id))
-            }
-            OwnedWorkspaceAuthorization::Capability(permission) => {
-                let root_role = tx.require_owned_workspace_root(permission).await?;
-                let role = if Permission::Write.granted_by(&root_role) {
-                    "writer"
-                } else {
-                    "reader"
-                };
-                (role, None)
-            }
+        let mut tx = self.begin_scoped(auth, create.is_some(), None).await?;
+        let root_role = tx.require_owned_workspace_root(permission).await?;
+        let role = if Permission::Write.granted_by(&root_role) {
+            "writer"
+        } else {
+            "reader"
         };
         if workspace_id == tx.scope.workspace_id {
             return Err(StorageError::Conflict("workspace cannot own itself".into()));
@@ -277,13 +227,7 @@ impl SqliteStore {
                         "workspace ownership does not match".into(),
                     ));
                 }
-                Some(match authorization {
-                    #[cfg(feature = "local-storage")]
-                    OwnedWorkspaceAuthorization::Administrator => {
-                        tx.live_role_in_scope(tx.principal_id, scope).await?
-                    }
-                    OwnedWorkspaceAuthorization::Capability(_) => role.into(),
-                })
+                Some(role.into())
             }
             None => match create {
                 Some(name) => {
@@ -299,18 +243,6 @@ impl SqliteStore {
                     .execute(&mut *tx.tx)
                     .await
                     .map_err(sqlite_err)?;
-                    if let Some(logical_id) = explicit_key {
-                        sqlite_db::query(
-                            "INSERT INTO oc_workspace_key_grants(tenant_id,workspace_id,logical_key_id,role)
-                             VALUES(?,?,?,'writer')",
-                        )
-                        .bind(tx.scope.tenant_id)
-                        .bind(workspace_id)
-                        .bind(logical_id)
-                        .execute(&mut *tx.tx)
-                        .await
-                        .map_err(sqlite_err)?;
-                    }
                     tx.audit("workspace.create_owned", workspace_id, json!({}))
                         .await?;
                     Some(role.into())

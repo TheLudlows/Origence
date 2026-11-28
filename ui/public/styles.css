@@ -226,8 +226,7 @@ small {
   max-height: 11rem;
   overflow-y: auto;
 }
-.workspace-item,
-.workspace-create {
+.workspace-item {
   justify-content: flex-start;
   width: 100%;
   background: transparent;
@@ -253,16 +252,6 @@ small {
 }
 .workspace-item:focus-visible {
   outline-offset: -2px;
-}
-.workspace-create {
-  margin-top: 4px;
-}
-.workspace-create::before {
-  content: "";
-  width: 10px;
-  height: 10px;
-  background: linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat,
-    linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat;
 }
 .sidebar nav {
   display: grid;
@@ -1029,8 +1018,7 @@ ins {
   button.link,
   button.icon-button,
   button.sidebar-exit,
-  button.workspace-item,
-  button.workspace-create {
+  button.workspace-item {
     min-width: 44px;
     min-height: 44px;
   }

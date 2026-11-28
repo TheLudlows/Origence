@@ -30,7 +30,9 @@ async function run(binary) {
       ["--offline", "workspace-create", name, ...args], { cwd: directory, env, encoding: "utf8" }));
     const a = bootstrap("研发");
     const b = bootstrap("运营", "--in-tenant-of", a.workspace_id);
-    secrets.push(a.token, b.token);
+    const { token: deploymentKey } = JSON.parse(execFileSync(binary, ["--offline", "deployment-admin-rotate"],
+      { cwd: directory, env, encoding: "utf8" }));
+    secrets.push(a.token, b.token, deploymentKey);
     host = spawn(binary, ["serve", "--local", "--bind", "127.0.0.1:0"], { cwd: directory, env });
     host.stderr.setEncoding("utf8").on("data", (chunk) => { stderr = (stderr + chunk).slice(-65536); });
     const lines = createInterface({ input: host.stdout });
@@ -57,6 +59,7 @@ async function run(binary) {
     const grant = (workspace, token) => ({ workspaceId: workspace.workspace_id, name: workspace.name, authorization: `Bearer ${token}` });
     ui = createUiServer({ apiBaseUrl: upstream, accounts: [
       { username: "admin", passwordHash, grants: [grant({ ...a, name: "研发" }, a.token), grant({ ...b, name: "运营" }, b.token)] },
+      { username: "deployment", passwordHash, grants: [], deploymentAuthorization: `Bearer ${deploymentKey}` },
       { username: "reader", passwordHash, grants: [grant({ ...a, name: "研发" }, readerKey.token)] },
     ] });
     ui.listen(0, "127.0.0.1");
@@ -149,8 +152,33 @@ async function run(binary) {
     await login(page, "reader");
     await page.getByText("只有工作区管理员可以管理 API Key。", { exact: true }).waitFor();
     assert.equal(await nav.getByRole("button", { name: "API Key" }).count(), 0);
+    await page.getByRole("button", { name: "退出", exact: true }).click();
+    await login(page, "deployment");
+    await page.getByRole("heading", { name: "部署管理", exact: true }).waitFor();
+    await page.getByRole("button", { name: "研发", exact: true }).waitFor();
+    await page.getByRole("button", { name: "运营", exact: true }).waitFor();
+    await page.getByRole("button", { name: "新建工作区", exact: true }).click();
+    await page.getByLabel("工作区名称", { exact: true }).fill("独立试点");
+    await page.getByRole("button", { name: "创建工作区", exact: true }).click();
+    const workspaceSecret = page.getByLabel("新工作区 Key", { exact: true });
+    await workspaceSecret.waitFor();
+    const firstKey = await workspaceSecret.inputValue();
+    secrets.push(firstKey);
+    const firstIdentity = await (await whoami(firstKey)).json();
+    assert.equal(firstIdentity.role, "workspace");
+    await page.getByRole("button", { name: "打开工作区", exact: true }).click();
+    await page.getByRole("button", { name: "API Key", exact: true }).click();
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "轮换工作区 Key", exact: true }).click();
+    await workspaceSecret.waitFor();
+    const nextKey = await workspaceSecret.inputValue();
+    secrets.push(nextKey);
+    assert.equal((await (await whoami(nextKey)).json()).workspace_id, firstIdentity.workspace_id);
+    assert.equal((await whoami(firstKey)).status, 401);
+    await page.getByRole("button", { name: "全局知识审核", exact: true }).click();
+    await page.getByRole("heading", { name: "全局知识审核", exact: true }).waitFor();
     assert.ok(secrets.every((value) => !stderr.includes(value)));
-    console.log("PASS Chromium and Origence: scoped key management, creation and rotation, one-time display, cross-workspace grants, revocation, reader denial");
+    console.log("PASS Chromium and Origence: scoped key management, deployment account sign-in, peer workspace creation and rotation, global knowledge review");
   } finally {
     await browser?.close();
     if (ui) { ui.closeAllConnections(); ui.close(); }

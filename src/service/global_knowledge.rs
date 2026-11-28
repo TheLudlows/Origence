@@ -1,5 +1,4 @@
 //! Submission and moderation of independent, immutable knowledge releases.
-use super::deployment::unauthorized_admin;
 use super::*;
 use serde::Deserialize;
 
@@ -118,8 +117,7 @@ impl Service {
             .engine
             .relational()
             .global_moderation(token, false)
-            .await
-            .map_err(unauthorized_admin)?;
+            .await?;
         let result = tx.global_catalog(Some(state), after, limit).await?;
         tx.commit().await?;
         Ok(result)
@@ -130,8 +128,7 @@ impl Service {
             .engine
             .relational()
             .global_moderation(token, false)
-            .await
-            .map_err(unauthorized_admin)?;
+            .await?;
         let result = tx.global_snapshot(id, true).await?;
         tx.commit().await?;
         Ok(result)
@@ -147,8 +144,7 @@ impl Service {
             .engine
             .relational()
             .global_moderation(token, true)
-            .await
-            .map_err(unauthorized_admin)?;
+            .await?;
         let result = tx.moderate_global_snapshot(id, decision).await?;
         tx.commit().await?;
         Ok(result)

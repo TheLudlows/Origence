@@ -39,6 +39,8 @@ mod context;
 #[cfg(all(test, feature = "local-storage"))]
 mod context_route_tests;
 mod deployment;
+#[cfg(feature = "local-storage")]
+pub use deployment::DeploymentKeyOperation;
 mod domain;
 #[cfg(feature = "local-storage")]
 mod full_text;

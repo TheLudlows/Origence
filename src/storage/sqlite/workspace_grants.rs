@@ -147,6 +147,14 @@ impl SqliteTx {
     /// Enumerate this workspace's current credentials without exposing token hashes.
     pub async fn list_issued_keys(&mut self, after: Uuid, limit: u32) -> StorageResult<Value> {
         self.check_permission(Permission::WorkspaceAdmin).await?;
+        self.list_issued_keys_inner(after, limit).await
+    }
+
+    pub(super) async fn list_issued_keys_inner(
+        &mut self,
+        after: Uuid,
+        limit: u32,
+    ) -> StorageResult<Value> {
         let count = key_page_size(limit)?;
         let rows: Vec<(Uuid, Uuid, String, bool, bool, i64)> = sqlite_db::query_as(
             "SELECT id,logical_key_id,role,default_access,allow_owned_workspaces,created_at
@@ -175,6 +183,14 @@ impl SqliteTx {
         limit: u32,
     ) -> StorageResult<Value> {
         self.check_permission(Permission::WorkspaceAdmin).await?;
+        self.list_workspace_key_grants_inner(after, limit).await
+    }
+
+    pub(super) async fn list_workspace_key_grants_inner(
+        &mut self,
+        after: Uuid,
+        limit: u32,
+    ) -> StorageResult<Value> {
         let count = key_page_size(limit)?;
         let rows: Vec<(Uuid, String)> = sqlite_db::query_as(
             "SELECT logical_key_id,role FROM oc_workspace_key_grants
@@ -222,6 +238,14 @@ impl SqliteTx {
         role: Option<&str>,
     ) -> StorageResult<()> {
         self.check_permission(Permission::WorkspaceAdmin).await?;
+        self.set_workspace_key_grant_inner(logical_id, role).await
+    }
+
+    pub(super) async fn set_workspace_key_grant_inner(
+        &mut self,
+        logical_id: Uuid,
+        role: Option<&str>,
+    ) -> StorageResult<()> {
         if role.is_some_and(|role| role == "workspace" || !Permission::Read.granted_by(role)) {
             return Err(StorageError::InvalidArgument("invalid workspace role"));
         }

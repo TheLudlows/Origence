@@ -78,31 +78,12 @@ impl SqliteStore {
 
     /// Atomically create an isolated workspace and its first credential.
     pub async fn create_key_workspace(&self, scope: Scope, name: &str) -> StorageResult<IssuedKey> {
-        let name = name.trim();
-        if scope.workspace_id.is_nil()
-            || scope.tenant_id.is_nil()
-            || name.is_empty()
-            || name.len() > 256
-        {
-            return Err(StorageError::InvalidArgument(
-                "invalid workspace identity or name",
-            ));
-        }
         let mut tx = self
             .pool
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(sqlite_err)?;
-        sqlite_db::query("INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES(?,?,?,?)")
-            .bind(scope.tenant_id)
-            .bind(scope.workspace_id)
-            .bind(name)
-            .bind(now_ms())
-            .execute(&mut *tx)
-            .await
-            .map_err(sqlite_err)?;
-        let key_id = Uuid::new_v4();
-        let key = insert_workspace_key(&mut tx, scope, key_id, key_id).await?;
+        let key = create_single_key_workspace(&mut tx, scope, name).await?;
         tx.commit().await.map_err(sqlite_err)?;
         Ok(key)
     }
@@ -114,26 +95,63 @@ impl SqliteStore {
             .begin_with("BEGIN IMMEDIATE")
             .await
             .map_err(sqlite_err)?;
-        let logical_id: Uuid = sqlite_db::query_scalar(
+        let key = rotate_single_workspace_key(&mut tx, scope).await?;
+        tx.commit().await.map_err(sqlite_err)?;
+        Ok(key)
+    }
+}
+
+/// Create the workspace and credential within the caller's write transaction.
+pub(super) async fn create_single_key_workspace(
+    conn: &mut Connection,
+    scope: Scope,
+    name: &str,
+) -> StorageResult<IssuedKey> {
+    let name = name.trim();
+    if scope.workspace_id.is_nil()
+        || scope.tenant_id.is_nil()
+        || name.is_empty()
+        || name.len() > 256
+        || name.contains('\0')
+    {
+        return Err(StorageError::InvalidArgument(
+            "invalid workspace identity or name",
+        ));
+    }
+    sqlite_db::query("INSERT INTO oc_workspaces(tenant_id,id,name,created_at) VALUES(?,?,?,?)")
+        .bind(scope.tenant_id)
+        .bind(scope.workspace_id)
+        .bind(name)
+        .bind(now_ms())
+        .execute(&mut *conn)
+        .await
+        .map_err(sqlite_err)?;
+    let key_id = Uuid::new_v4();
+    insert_workspace_key(conn, scope, key_id, key_id).await
+}
+
+pub(super) async fn rotate_single_workspace_key(
+    conn: &mut Connection,
+    scope: Scope,
+) -> StorageResult<IssuedKey> {
+    let logical_id: Uuid = sqlite_db::query_scalar(
             "SELECT logical_key_id FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND role='workspace'
              ORDER BY created_at DESC,id DESC LIMIT 1",
         )
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut *conn)
         .await
         .map_err(sqlite_err)?
         .ok_or(StorageError::NotFound)?;
-        sqlite_db::query(
+    sqlite_db::query(
             "UPDATE oc_api_keys SET revoked=1 WHERE tenant_id=? AND workspace_id=? AND role='workspace' AND NOT revoked",
         )
         .bind(scope.tenant_id)
         .bind(scope.workspace_id)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await
         .map_err(sqlite_err)?;
-        let key = insert_workspace_key(&mut tx, scope, logical_id, Uuid::new_v4()).await?;
-        tx.commit().await.map_err(sqlite_err)?;
-        Ok(key)
-    }
+    let key = insert_workspace_key(conn, scope, logical_id, Uuid::new_v4()).await?;
+    Ok(key)
 }

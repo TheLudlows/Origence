@@ -89,23 +89,6 @@ impl Service {
         Ok(json!({"items":items,"next_after":next_after}))
     }
 
-    pub(crate) async fn create_managed_workspace(
-        &self,
-        auth: &AuthContext,
-        workspace_id: Uuid,
-        name: &str,
-    ) -> Result<Value> {
-        if workspace_id.is_nil() {
-            return Err(AppError::Invalid("workspace ID must not be nil".into()));
-        }
-        let scoped = self
-            .engine
-            .relational()
-            .create_managed_workspace(authorized(auth), workspace_id, name.trim())
-            .await?;
-        Ok(json!({"workspace_id":scoped.scope.workspace_id}))
-    }
-
     /// Create or validate an immutable child of the authenticated key's root.
     /// The store checks the live key, capability, role and root in one write
     /// transaction. Returned contexts remain subject to live checks on every

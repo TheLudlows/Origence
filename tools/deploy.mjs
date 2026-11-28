@@ -15,7 +15,7 @@ const usage = `Usage: origence-deploy install [--endpoint URL] [--token KEY | --
        origence-deploy uninstall
 
 --from-env               Read OC_SERVER_URL and OC_API_KEY
---init NAME              Initialize a local workspace Key and deployment administrator Key
+--init NAME              Initialize a workspace Key and a deployment administrator account
 --force                  Refresh deployment settings and reset a linked account password
                          Use with --init to back up and reinitialize local data
 --data-dir PATH          Existing or explicitly initialized local backend data directory
@@ -197,6 +197,8 @@ async function install(state, args) {
       "The console port is already in use by a service outside this installation. Select another --ui-port.");
   const binary = origenceBinary(args.origence ?? old?.binary);
   const env = withoutWorkspaceKey(process.env);
+  const suppliedDeploymentKey = env.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY;
+  delete env.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY;
   execute(binary, ["--version"], { env, diagnosis: "Origence could not be executed" });
   status("executables", "success", "Origence is available.");
   if (initialize) {
@@ -208,8 +210,18 @@ async function install(state, args) {
       state.save();
     }
   } else if (init) status("bootstrap", "skipped", "Reusing the initialized workspace.");
-  const deploymentKey = state.value.bootstrap?.token === token ? state.value.bootstrap.deployment_admin_key : undefined;
+  const deploymentKey = state.value.bootstrap?.token === token
+    ? state.value.bootstrap.deployment_admin_key
+    : suppliedDeploymentKey ?? (sameEndpoint && old?.dataDir === dataDir ? old.deploymentKey : undefined);
   await ensureApi(state, endpoint, dataDir, binary, env);
+  if (deploymentKey) {
+    check(/^oc_admin_[a-f0-9]{64}$/.test(deploymentKey), "Invalid deployment administrator credential format.");
+    const response = await fetch(new URL("/admin/deployment/me", endpoint), {
+      headers: { Authorization: `Bearer ${deploymentKey}` }, redirect: "manual", signal: AbortSignal.timeout(5000),
+    });
+    check(response.ok && (await response.json())?.role === "deployment_admin",
+      "The backend did not authorize the deployment administrator credential.");
+  }
   const who = await identity(endpoint.origin, token);
   if (state.value.bootstrap?.token === token)
     check(who.workspace_id === state.value.bootstrap.workspace_id, "The initialized API resolved to a different workspace.");
@@ -218,11 +230,12 @@ async function install(state, args) {
   if (old && !sameEndpoint && state.value.apiEndpoint !== endpoint.origin) await stopService(state, "api");
   status("http-mcp", "success", { tools: mcp.toolCount, workspace_id: who.workspace_id });
 
-  const mode = who.role === "workspace" ? "workspace" : "account";
-  const reconfigure = !old || args.force || (old.mode ?? "account") !== mode || old.workspace !== who.workspace_id || old.key !== who.id || old.endpoint !== endpoint.origin || old.ui !== ui;
+  const mode = deploymentKey ? "deployment" : who.role === "workspace" ? "workspace" : "account";
+  const reconfigure = !old || args.force || (old.mode ?? "account") !== mode || old.deploymentKey !== deploymentKey || old.workspace !== who.workspace_id || old.key !== who.id || old.endpoint !== endpoint.origin || old.ui !== ui;
   const config = { endpoint: endpoint.origin, token, workspace: who.workspace_id, key: who.id, ui,
     mode,
-    ...(mode === "account" ? { password: !args.force && old?.password || randomBytes(24).toString("base64url") } : {}),
+    ...(mode !== "workspace" ? { password: !args.force && old?.password || randomBytes(24).toString("base64url") } : {}),
+    ...(deploymentKey ? { deploymentKey } : {}),
     binding: reconfigure ? randomUUID() : old.binding,
     dataDir, binary, initialized: Boolean(initialize || recovered?.token === token || sameEndpoint && old?.initialized) };
   if (reconfigure && await listening(new URL(ui)) && !(old?.ui === ui && activeService(state, "ui")))
@@ -250,46 +263,48 @@ async function install(state, args) {
     state.save();
     accounts.configureConsoleAccount(db, { kind: "set-password", username: account,
       passwordHash: await accounts.hashConsolePassword(config.password) });
-    if (state.value.accountWorkspace && state.value.accountWorkspace !== who.workspace_id)
+    if (state.value.accountWorkspace && (mode === "deployment" || state.value.accountWorkspace !== who.workspace_id))
       accounts.configureConsoleAccount(db, { kind: "revoke", username: account, workspaceId: state.value.accountWorkspace });
-    accounts.configureConsoleAccount(db, { kind: "grant", username: account,
-      workspaceId: who.workspace_id, name: "Origence workspace", keyEnv: grantKey });
+    if (mode === "account") {
+      accounts.configureConsoleAccount(db, { kind: "grant", username: account,
+        workspaceId: who.workspace_id, name: "Origence workspace", keyEnv: grantKey });
+      state.value.accountWorkspace = who.workspace_id;
+    } else delete state.value.accountWorkspace;
     state.value.accountBinding = config.binding;
-    state.value.accountWorkspace = who.workspace_id;
     state.save();
   }
   const uiEnv = { ...env, ORIGENCE_API_BASE_URL: endpoint.origin };
-  if (mode === "account") {
+  delete uiEnv.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY;
+  if (mode !== "workspace") {
     uiEnv.ORIGENCE_UI_ACCOUNTS_DB = db;
-    uiEnv[grantKey] = token;
+    if (deploymentKey) uiEnv.ORIGENCE_UI_DEPLOYMENT_ADMIN_KEY = deploymentKey;
+    else uiEnv[grantKey] = token;
   }
   delete uiEnv.ORIGENCE_UI_ORIGIN;
   await ensureConsole(state, config, old, uiEnv);
   const login = mode === "workspace" ? { workspace_key: token } : { username: account, password: config.password };
-  const consoleSession = await consoleLogin(ui, login, config.workspace, config.key);
+  const consoleSession = await consoleLogin(ui, login, config.workspace, config.key, mode);
   try {
     status("console-session", "success", { mode, workspace_id: config.workspace, role: who.role });
-    if (deploymentKey) {
-      const adminSession = await consoleLogin(ui, { deployment_key: deploymentKey });
-      await adminSession.logout().catch(() => {});
-      status("deployment-admin-session", "success", "Verified the deployment administrator Key.");
-    }
+    if (deploymentKey) status("deployment-admin-session", "success", "Verified the deployment administrator account.");
     if (args["verify-write"] && ["writer", "admin", "workspace"].includes(who.role)) {
       state.value.probes ??= {};
       const scope = [endpoint.origin, who.workspace_id, who.id].join("/");
       const run = state.value.probes[scope] ??= randomUUID();
       state.save();
       await mcp.call("context_run_create", { run_id: run, summary: "Origence installer connectivity check" });
-      const read = await consoleSession.read("/v1/runs/" + run);
+      const read = await consoleSession.read(mode === "deployment"
+        ? `/admin/deployment/workspaces/${config.workspace}/runs/${run}`
+        : "/v1/runs/" + run);
       check(read.run?.run_id === run, "The console did not return the written Run.");
-      status("write-check", "success", { run_id: run, url: ui + "/#runs/" + run });
+      status("write-check", "success", { run_id: run, url: mode === "deployment" ? ui : ui + "/#runs/" + run });
     } else status("write-check", "skipped", args["verify-write"] ? "A key with write access is required." : "Use --verify-write to record one labeled test Run.");
   } finally {
     await consoleSession.logout().catch(() => {});
   }
 
   const credentials = { endpoint: endpoint.origin, workspace_id: who.workspace_id, role: who.role, ui,
-    login_mode: mode, token, ...(mode === "account" ? login : {}),
+    login_mode: mode, token, ...(mode !== "workspace" ? login : {}),
     ...(deploymentKey ? { deployment_admin_key: deploymentKey } : {}) };
   if (credentialFile) saveCredentials(credentialFile, credentials);
   if (args["show-secrets"] || interactive) {
