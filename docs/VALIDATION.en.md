@@ -4,6 +4,22 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Administrator management of workspace memory and knowledge
+
+Implementation and browser checks used `b534ee9bf521e8e9e15830e06368a1e0ab68bcbd`, with main
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015` merged, on Linux with Rust 1.98.0, Node 24.22.1, and isolated fresh databases.
+All six workspace access cases passed. Loopback HTTP covered administrator memory and knowledge writes, file upload,
+job cancel and retry, pinned historical reads, idempotent deletion, and revocation after administrator credential rotation.
+Another workspace in the same tenant was denied job reads, attachment use, updates, and deletion. Audit rows recorded
+the selected workspace and the administrator credential's internal identity.
+The full default-feature Rust suite passed 486 tests with eight configured skips. Formatting and strict all-target
+Clippy passed for all features, `sqlite` only, and no default features.
+
+All 34 UI tests, type checking, and the HTTP MCP smoke passed. Chromium 156.0.8078.79 passed
+`check-key-management-browser.cjs` and `check-console-session-browser.cjs`. An administrator signed in and created,
+updated, and deleted knowledge against a loopback service. The checks also covered rejection of an ordinary account,
+workspace key rotation, and access to global review. The fixtures use synthetic data. Native Windows and GitHub CI are pending.
+
 ## 2026-11-28 · Administrator label and jobs across workspace key rotation
 
 Linux verification used main `92759833a943d8f5529e2938e77d0c10b636cd75`, Rust 1.98.0, and Node 24.22.1.
