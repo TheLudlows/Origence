@@ -3,6 +3,7 @@
 Maintain this project's root agent instructions only in `AGENTS.md`. Do not create
 language-specific copies of this file; it is an explicit exception to bilingual
 documentation requirements.
+Maintain the project cleanup Skill in `SKILL.md` only.
 
 Read the relevant design, `docs/STATUS.md`, and current code before changing an
 implementation. Prefer the smallest change that meets the documented behavior.

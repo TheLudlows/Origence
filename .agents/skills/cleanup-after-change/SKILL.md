@@ -5,8 +5,6 @@ description: "Clean up superseded code, redundant implementation paths and tests
 
 # Cleanup after change
 
-**English** · [简体中文](SKILL.zh-CN.md)
-
 Make cleanup part of implementation completion. Work within the authorized change and its direct consequences, following applicable project instructions and compatibility commitments. Perform justified cleanup without seeking confirmation for each removal. Do not treat this skill as authorization to clean the entire repository, delete the user's work, or change project rules.
 
 ## 1. Identify scope and replacements
