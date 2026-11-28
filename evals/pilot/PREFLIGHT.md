@@ -18,7 +18,7 @@ python tools/anyseek_smoke.py --anyseek-binary ANYSEEK_BINARY --run python evals
 
 ## 手工启动 Windows 服务的前提
 
-为本轮指定全新的 `-DataDir` 和 workspace。先按当前版本初始化，再用 `tools/start-dev.ps1` 启动，嵌入式 AnySeek 使用同一数据根目录。保留已有数据库。旧库缺少 `oc_run_verifications` 时记录为 schema 不兼容，改用新库。登记初始化二进制摘要、schema 和 workspace UUID。
+使用当前版本运行 `origence.exe serve --local --data-dir <新目录>`，等待 `/health/ready`，再创建本轮专用工作区。嵌入式 AnySeek 使用同一数据根目录。登记服务二进制摘要、schema 和工作区 UUID。见 [Windows 开发说明](../../docs/WINDOWS-DEV.md)。
 
 ## 独立检索预检（未评分）
 

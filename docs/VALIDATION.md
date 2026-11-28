@@ -7,6 +7,14 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 清理冗余开发工具
+
+基于 main `d8dd128`，使用 Linux、Rust 1.98.0、Node.js 24.22.1 和隔离合成数据。
+
+- `cargo fmt --all -- --check`、`cargo clippy --locked --offline --all-targets -j 3 -- -D warnings`、`git diff --check` 和更新后的文档链接检查通过。Python `unittest discover` 在 `tools` 和 `evals/pilot` 分别通过 3 项与 58 项。
+- `tools/anyseek_smoke.py --embedded --binary <origence>` 通过。用 CI 固定的独立 AnySeek `6a46fc7` 运行 `--cargo-tests --binary <origence> --run python3 tools/smoke.py --binary <origence>`，真实后端合同 8 项、HTTP/MCP、重启和撤回检查通过。已移除的选项返回参数错误。
+- `tools/installer_smoke.py --binary <origence> --claude <claude> --codex <codex>` 通过部署、接入、重装和卸载。npm 注册表拒绝连接，控制台使用同一锁文件的既有依赖重新构建。未运行 Windows 原生或真实模型验收。
+
 ## 2026-11-28 · 移除旧 Key 列表和指定审阅者
 
 在实现提交 `1282215c4151bafaafd4a215e1dc556ee8724750` 上使用隔离新库。管理员只能查询当前

@@ -18,7 +18,7 @@ Replace the script above with `evals/pilot/public_handoff.py` and use a differen
 
 ## Prerequisites for manual Windows service startup
 
-Use a fresh `-DataDir` and workspace for this run. Initialize with the current version and then start `tools/start-dev.ps1`. The embedded AnySeek instance uses the same data root. Preserve existing databases. If an old database lacks `oc_run_verifications`, record the schema incompatibility and use a new database. Record the initialization binary hash, schema, and workspace UUID.
+Run the current version with `origence.exe serve --local --data-dir <fresh-directory>`. Wait for `/health/ready` before creating a workspace for this run. Embedded AnySeek uses the same data root. Record the binary hash, schema, and workspace UUID. See [Windows development](../../docs/WINDOWS-DEV.en.md).
 
 ## Separate retrieval preflight (unscored)
 

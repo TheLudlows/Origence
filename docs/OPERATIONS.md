@@ -246,8 +246,8 @@ Run 中的 retrieval 诊断可区分未发出、网络失败、HTTP 错误和不
 
 ## Windows 原生开发联启
 
-使用 `origence.exe serve --local` 启动 API 和本地 AnySeek。需要 Node UI 时可使用
-[`tools/start-dev.ps1`](WINDOWS-DEV.md) 在同一 PowerShell 7.4+ 控制台联启。脚本入口禁用模型。
+使用 `origence.exe serve --local` 启动 API 和本地 AnySeek。需要一起启动控制台时，
+使用 `.\bin\origence-deploy.cmd install`。详见 [Windows 开发说明](WINDOWS-DEV.md)。
 
 ## 私有问答归档与配套恢复
 
