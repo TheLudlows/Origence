@@ -380,7 +380,15 @@ impl Service {
             (Vec::new(), Vec::new())
         };
         let hits = fuse(branches, effective == "hybrid");
+        let global = if input.memory_identity.is_none() && !terms.is_empty() {
+            tx.approved_global_knowledge().await?
+        } else {
+            Vec::new()
+        };
         tx.commit().await?;
+        let shared = self
+            .find_global_keywords(global, &terms, input.limit)
+            .await?;
         let branches_ms = branches_started.elapsed().as_secs_f64() * 1000.0;
         let verification_started = std::time::Instant::now();
         let mut verify = self.read(a, Permission::Read).await?;
@@ -424,14 +432,17 @@ impl Service {
             }
         }
         let relations = live_relations;
-        if input.memory_identity.is_none() {
-            let shared = verify.global_keyword_hits(&terms, input.limit).await?;
-            if !shared.is_empty() {
-                if effective != "keyword" {
-                    warnings.push("Global knowledge uses keyword matching.");
-                }
-                hits = merge_global_hits(hits, shared, input.limit);
+        let mut visible_shared = Vec::new();
+        for (header, hit) in shared {
+            if verify.global_header(header.id).await? == *header {
+                visible_shared.push(hit);
             }
+        }
+        if !visible_shared.is_empty() {
+            if effective != "keyword" {
+                warnings.push("Global knowledge uses keyword matching.");
+            }
+            hits = merge_global_hits(hits, visible_shared, input.limit);
         }
         verify.commit().await?;
         let verification_ms = verification_started.elapsed().as_secs_f64() * 1000.0;

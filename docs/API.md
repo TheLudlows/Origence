@@ -174,7 +174,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | `GET /admin/deployment/global-knowledge/{publication_id}` | 查看待审正文、来源工作空间和固定版本 |
 | `POST /admin/deployment/global-knowledge/{publication_id}/review` | 通过 `decision` 执行 `approve`、`reject` 或 `withdraw` |
 
-批准前核对原版本仍有效。批准后共享副本独立于原知识的后续更新或删除，下架会立即停止新的共享读取、召回及含该引用的 Run 上下文重放。全局公开记录使用独立 ID 和正文内 UTF-8 字节范围。原始附件、会话及私有来源 ID 仍由原工作空间授权。
+批准前核对原版本仍有效。批准后共享副本独立于原知识的后续更新或删除，下架会立即停止新的共享读取、召回及含该引用的 Run 上下文重放。 共享正文和同分块 AND 关键词索引在独立的 AnySeek 集合。Origence 将已批准的分块分批提交给 AnySeek，合并排名，并在返回前再次核对审核状态。全局公开记录使用独立 ID 和正文内 UTF-8 字节范围。原始附件、会话及私有来源 ID 仍由原工作空间授权。
 
 `search`、`resolve`、知识路由的 `context` 和 Run 上下文合并本空间结果与全局关键词命中，沿用请求的结果数与上下文预算。向量和混合模式仍使用关键词匹配全局知识。搜索与 resolve 用 `scope` 标明范围，上下文使用 `global_knowledge` 引用。MCP 的 `context_get` 传 `scope: "global"` 和全局发布 ID 可读取固定版本。
 

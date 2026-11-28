@@ -20,6 +20,9 @@ impl RelationalStore for SqliteStore {
         workspace_id: Uuid,
         name: &str,
     ) -> StorageResult<()> {
+        if tenant_id.is_nil() || workspace_id.is_nil() {
+            return Err(StorageError::InvalidArgument("invalid workspace scope"));
+        }
         sqlite_db::query(
             "INSERT INTO oc_workspaces(tenant_id, id, name, created_at) VALUES (?, ?, ?, ?)",
         )

@@ -30,6 +30,10 @@ SQLite still stores immutable Learning candidates and the regular evidence items
 
 Standalone AnySeek deployments accept collection Info after removal of the Record count limit and still validate advertised legacy limits and the query candidate limit. See [VALIDATION](VALIDATION.en.md#2026-11-27--standalone-anyseek-collection-limit-compatibility) for pinned versions and evidence.
 
+## Global knowledge content
+
+AnySeek stores the chunks and keyword index of independent global releases. SQLite keeps each release’s source, review state, and the digests and ranges needed to validate frozen chunks and Run citations. Pending, rejected, and withdrawn releases stay out of public candidates.
+
 ## Single-key workspaces
 
 A fresh database supports offline provisioning of single-key workspaces. The credential signs into both Agents and the console, provides workspace content access, and can delete memories. Original conversation turns support append and read. Successful archival queues automatic extraction on the existing durable worker. Replays keep the same job, including after memory deletion. Key rotation preserves the workspace, session history, and extraction jobs. The initialized deployment administrator account can create peer workspaces, manage their keys, inspect sessions and Runs, and moderate fixed-version global knowledge releases. Approved copies are recalled alongside workspace results. See the [deployment management and global knowledge APIs](API.en.md#deployment-administrator).
