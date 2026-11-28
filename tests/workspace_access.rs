@@ -658,12 +658,10 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
             .len(),
         1
     );
-    for path in ["/admin/keys", "/v1/workspaces/owned"] {
-        assert!(matches!(
-            client.call(Method::GET, path, None, None).await,
-            Err(AppError::Forbidden)
-        ));
-    }
+    assert!(matches!(
+        client.call(Method::GET, "/admin/keys", None, None).await,
+        Err(AppError::Forbidden)
+    ));
     for path in [
         format!("/v1/sessions/{session_id}/turns/{turn}"),
         format!("/v1/sessions/{session_id}?through_sequence=1"),

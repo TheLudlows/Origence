@@ -2,29 +2,6 @@
 use super::*;
 
 #[cfg(feature = "local-storage")]
-#[derive(Debug)]
-pub enum DeploymentKeyOperation {
-    List {
-        after: Uuid,
-        limit: u32,
-    },
-    ListGrants {
-        after: Uuid,
-        limit: u32,
-    },
-    Issue {
-        role: String,
-    },
-    Rotate(Uuid),
-    RotateSingle,
-    Revoke(Uuid),
-    SetGrant {
-        logical_id: Uuid,
-        role: Option<String>,
-    },
-}
-
-#[cfg(feature = "local-storage")]
 fn admin_actor_id(token_hash: &str) -> Uuid {
     // Administrator receipts use a distinct UUID version from workspace keys.
     // Derive the actor from the verified fingerprint without storing the token.
@@ -244,55 +221,37 @@ impl SqliteStore {
     }
 
     #[cfg(feature = "local-storage")]
-    pub(crate) async fn administer_deployment_keys(
+    pub(crate) async fn deployment_workspace_keys(
         &self,
         token: &str,
         workspace: Uuid,
-        operation: DeploymentKeyOperation,
+        after: Uuid,
+        limit: u32,
     ) -> StorageResult<Value> {
-        use DeploymentKeyOperation::*;
-        let write = !matches!(operation, List { .. } | ListGrants { .. });
-        let mut tx = self
-            .deployment_workspace_tx(token, workspace, write)
-            .await?;
-        let scope = tx.scope;
-        let single_key = super::workspace_key::has_workspace_key(&mut tx.tx, scope).await?;
-        if single_key && !matches!(operation, List { .. } | RotateSingle) {
-            return Err(StorageError::Conflict(
-                "this workspace uses a single key".into(),
-            ));
-        }
-        let result = match operation {
-            List { after, limit } => {
-                let mut page = tx.list_issued_keys_inner(after, limit).await?;
-                page["single_key"] = json!(single_key);
-                page
-            }
-            ListGrants { after, limit } => tx.list_workspace_key_grants_inner(after, limit).await?,
-            Issue { role } => json!(
-                tx.issue_scoped_key_inner(&role, KeyCapabilities::default())
-                    .await?
-            ),
-            Rotate(id) => json!(tx.rotate_scoped_key_inner(id, false).await?),
-            RotateSingle => {
-                let key =
-                    super::workspace_key::rotate_single_workspace_key(&mut tx.tx, scope).await?;
-                tx.audit("deployment.workspace.key.rotate", key.key_id, json!({}))
-                    .await?;
-                json!(key)
-            }
-            Revoke(id) => {
-                tx.revoke_scoped_key_inner(id).await?;
-                json!({"key_id":id,"revoked":true})
-            }
-            SetGrant { logical_id, role } => {
-                tx.set_workspace_key_grant_inner(logical_id, role.as_deref())
-                    .await?;
-                json!({"workspace_id":workspace,"logical_key_id":logical_id,"role":role})
-            }
+        let mut tx = self.begin_deployment_inspection(token, workspace).await?;
+        let single_key = super::workspace_key::has_workspace_key(&mut tx.tx, tx.scope).await?;
+        let mut page = if single_key {
+            tx.list_issued_keys_inner(after, limit).await?
+        } else {
+            json!({"items":[],"next_after":null})
         };
+        page["single_key"] = json!(single_key);
         tx.commit().await?;
-        Ok(result)
+        Ok(page)
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn rotate_deployment_workspace_key(
+        &self,
+        token: &str,
+        workspace: Uuid,
+    ) -> StorageResult<IssuedKey> {
+        let mut tx = self.deployment_workspace_tx(token, workspace, true).await?;
+        let key = super::workspace_key::rotate_single_workspace_key(&mut tx.tx, tx.scope).await?;
+        tx.audit("deployment.workspace.key.rotate", key.key_id, json!({}))
+            .await?;
+        tx.commit().await?;
+        Ok(key)
     }
 }
 

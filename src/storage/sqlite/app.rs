@@ -365,14 +365,6 @@ impl SqliteTx {
         capabilities: KeyCapabilities,
     ) -> StorageResult<IssuedKey> {
         self.check_permission(Permission::WorkspaceAdmin).await?;
-        self.issue_scoped_key_inner(role, capabilities).await
-    }
-
-    pub(super) async fn issue_scoped_key_inner(
-        &mut self,
-        role: &str,
-        capabilities: KeyCapabilities,
-    ) -> StorageResult<IssuedKey> {
         if role == "workspace" || !Permission::Read.granted_by(role) {
             return Err(StorageError::Conflict("invalid role".into()));
         }

@@ -19,7 +19,6 @@ import {
   type ViewContext,
 } from "./components.js";
 import { contextPage } from "./context.js";
-import { keysPage } from "./keys.js";
 import { overview, runsPage } from "./runs.js";
 import type { ConsoleSession, ConsoleSessionResponse, ConsoleWorkspace } from "./types.js";
 
@@ -32,7 +31,6 @@ const pages = [
   ["global-knowledge", "全局知识"],
   ["contexts", "上下文工作台"],
   ["sessions", "会话"],
-  ["keys", "API Key"],
   ["agents", "Agent 连接"],
 ] as const;
 const sessionPath = "/console/session";
@@ -224,7 +222,6 @@ async function render() {
   nav.setAttribute("aria-label", "主导航");
   for (const [key, label] of pages) {
     if (key === "sessions" && user.role === "reader") continue;
-    if (key === "keys" && user.role !== "admin") continue;
     if (key === "agents" && !canInspectAgents(user.role)) continue;
     const link = button(label, () => navigate(key), "nav-item");
     if (key === page) link.setAttribute("aria-current", "page");
@@ -318,7 +315,6 @@ async function render() {
       await globalKnowledgePage(content, ctx, id);
     else if (page === "contexts") contextPage(content, ctx);
     else if (page === "sessions") await sessionsPage(content, ctx);
-    else if (page === "keys") keysPage(content, ctx, activeWorkspace);
     else if (page === "agents") agentsPage(content, ctx, activeWorkspace.workspace_id);
     else if (page === "asset" && id)
       await assetDetail(content, id, version, ctx);

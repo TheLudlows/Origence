@@ -29,7 +29,6 @@ pub fn router_with_mcp(service: Service, config: super::McpHttpConfig) -> Router
         .route("/health/ready", get(ready))
         .route("/v1/whoami", get(whoami))
         .route("/v1/workspaces", get(workspaces))
-        .route("/v1/workspaces/owned", get(list_owned_workspaces))
         .route("/v1/session", get(private_session))
         .route("/admin/keys/{id}/rotate", post(rotate_key))
         .route("/admin/keys", get(list_keys).post(issue_key))
@@ -496,21 +495,6 @@ async fn workspaces(State(s): State<Service>, h: HeaderMap) -> Result<Json<Value
 struct WorkspacePage {
     after: Option<Uuid>,
     limit: Option<u32>,
-}
-
-async fn list_owned_workspaces(
-    State(s): State<Service>,
-    h: HeaderMap,
-    Query(page): Query<WorkspacePage>,
-) -> Result<Json<Value>> {
-    Ok(Json(
-        s.list_managed_workspaces(
-            &auth(&s, &h).await?,
-            page.after.unwrap_or_default(),
-            page.limit.unwrap_or(50),
-        )
-        .await?,
-    ))
 }
 
 #[derive(Deserialize)]

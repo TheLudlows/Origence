@@ -6,7 +6,6 @@ const { chromium } = require("playwright");
 const alpha = "11111111-1111-4111-8111-111111111111";
 const beta = "22222222-2222-4222-8222-222222222222";
 const excluded = "33333333-3333-4333-8333-333333333333";
-const existingChild = "44444444-4444-4444-8444-444444444444";
 const singleWorkspace = "55555555-5555-4555-8555-555555555555";
 const workspaceKey = "oc_" + "a".repeat(64);
 const deploymentKey = "oc_admin_" + "b".repeat(64);
@@ -28,7 +27,6 @@ async function listen(server) {
 async function run() {
   const { createUiServer } = await import("../dist/server.js");
   const { hashConsolePassword } = await import("../dist/console-accounts.js");
-  const children = new Map([[existingChild, { workspace_id: existingChild, name: "已有子工作区" }]]);
   const knowledge = { asset_id: alpha, title: "共享运维手册", version: 1, kind: "knowledge",
     content: "发布版运维知识正文", source_event_id: excluded, content_hash: "a".repeat(64),
     identity: null, normalization_status: "not_applicable", restored_from: null };
@@ -110,15 +108,11 @@ async function run() {
     if (!grant) return send({}, 401);
     if (path === "/v1/whoami")
       return send({ id: grant.workspaceId, workspace_id: grant.workspaceId, role: grant.workspaceId === alpha ? "admin" : "reader" });
-    if (path === "/v1/workspaces/owned")
-      return grant.workspaceId === alpha ? send({ items: [...children.values()].map((child) => ({ ...child, role: "writer" })), next_after: null }) : send({}, 403);
     if (path === "/v1/assets") {
-      const scoped = req.headers["x-origence-workspace"];
-      const child = scoped ? children.get(scoped) : undefined;
-      if (scoped && (!child || grant.workspaceId !== alpha)) return send({}, 403);
+      if (req.headers["x-origence-workspace"]) return send({}, 403);
       return send({ next_after: null, items: [{
-        asset_id: child?.workspace_id ?? grant.workspaceId, kind: "knowledge",
-        title: `${child?.name ?? grant.name}知识夹具`, version: 1, source_event_id: excluded,
+        asset_id: grant.workspaceId, kind: "knowledge",
+        title: `${grant.name}知识夹具`, version: 1, source_event_id: excluded,
       }] });
     }
     if (path === "/v1/runs") return send({ items: [], next_after: null });
@@ -173,8 +167,8 @@ async function run() {
     const workspaces = page.getByRole("list", { name: "工作区", exact: true });
     const workspace = (name) => workspaces.getByRole("button", { name, exact: true });
     await workspaces.waitFor();
-    assert.deepEqual(await workspaces.getByRole("button").allTextContents(), ["研发", "已有子工作区", "运营"]);
-    for (const name of ["研发", "已有子工作区", "运营"]) assert.equal(await workspace(name).isVisible(), true);
+    assert.deepEqual(await workspaces.getByRole("button").allTextContents(), ["研发", "运营"]);
+    for (const name of ["研发", "运营"]) assert.equal(await workspace(name).isVisible(), true);
     assert.equal(await workspace("研发").getAttribute("aria-current"), "true");
     assert.equal(await workspace("另一个账号的工作区").count(), 0);
     await workspace("运营").press("Enter");
@@ -198,12 +192,10 @@ async function run() {
     });
     assert.equal((await context.cookies()).find((cookie) => cookie.name.startsWith("origence-console-")).httpOnly, true);
     assert.equal(await page.getByRole("button", { name: "新建工作区", exact: true }).count(), 0);
-    await workspace("已有子工作区").tap();
+    await workspace("研发").tap();
     await page.getByRole("button", { name: /知识管理/ }).click();
-    await page.getByText("已有子工作区知识夹具", { exact: true }).waitFor();
-    await page.reload();
-    await page.getByText("已有子工作区知识夹具", { exact: true }).waitFor();
-    assert.equal(await workspace("已有子工作区").getAttribute("aria-current"), "true");
+    await page.getByText("研发知识夹具", { exact: true }).waitFor();
+    assert.equal(await workspace("研发").getAttribute("aria-current"), "true");
     await page.getByRole("button", { name: "退出", exact: true }).click();
     await page.getByLabel("账号", { exact: true }).waitFor();
     await page.reload();

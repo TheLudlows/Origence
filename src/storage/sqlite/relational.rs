@@ -123,66 +123,6 @@ impl RelationalStore for SqliteStore {
 }
 
 impl SqliteStore {
-    #[cfg(feature = "local-storage")]
-    pub(crate) async fn list_managed_workspaces(
-        &self,
-        auth: AuthorizedScope,
-        after: Uuid,
-        limit: u32,
-    ) -> StorageResult<Vec<(Uuid, String, String)>> {
-        let mut tx = self
-            .begin_scoped(auth, false, Some(Permission::WorkspaceAdmin))
-            .await?;
-        tx.require_root_workspace().await?;
-        let (logical_id, home, home_role, default_access, capable) =
-            tx.managed_workspace_key().await?;
-        let rows = if capable && home == tx.scope.workspace_id && default_access {
-            sqlite_db::query_as(
-                "SELECT id,name,'writer' FROM oc_workspaces WHERE tenant_id=? AND owner_workspace_id=? \
-                 AND id>? ORDER BY id LIMIT ?",
-            )
-            .bind(tx.scope.tenant_id)
-            .bind(tx.scope.workspace_id)
-            .bind(after)
-            .bind(limit)
-            .fetch_all(&mut *tx.tx)
-            .await
-            .map_err(sqlite_err)?
-        } else {
-            let mut grants = super::workspace_grants::additional_grants(
-                &mut tx.tx,
-                tx.scope.tenant_id,
-                logical_id,
-            )
-            .await?;
-            if default_access && home != tx.scope.workspace_id {
-                grants.push((home, home_role));
-                grants.sort_unstable_by_key(|(id, _)| *id);
-            }
-            let mut rows = Vec::new();
-            for (id, role) in grants.into_iter().filter(|(id, _)| *id > after) {
-                let name: Option<String> = sqlite_db::query_scalar(
-                    "SELECT name FROM oc_workspaces WHERE tenant_id=? AND owner_workspace_id=? AND id=?",
-                )
-                .bind(tx.scope.tenant_id)
-                .bind(tx.scope.workspace_id)
-                .bind(id)
-                .fetch_optional(&mut *tx.tx)
-                .await
-                .map_err(sqlite_err)?;
-                if let Some(name) = name {
-                    rows.push((id, name, role));
-                    if rows.len() == limit as usize {
-                        break;
-                    }
-                }
-            }
-            rows
-        };
-        tx.commit().await?;
-        Ok(rows)
-    }
-
     async fn owned_workspace(
         &self,
         auth: AuthorizedScope,
@@ -261,20 +201,6 @@ impl SqliteStore {
 }
 
 impl SqliteTx {
-    #[cfg(feature = "local-storage")]
-    async fn managed_workspace_key(&mut self) -> StorageResult<(Uuid, Uuid, String, bool, bool)> {
-        sqlite_db::query_as(
-            "SELECT logical_key_id,workspace_id,role,default_access,allow_owned_workspaces=1
-             FROM oc_api_keys WHERE id=? AND tenant_id=? AND NOT revoked",
-        )
-        .bind(self.principal_id)
-        .bind(self.scope.tenant_id)
-        .fetch_optional(&mut *self.tx)
-        .await
-        .map_err(sqlite_err)?
-        .ok_or(StorageError::Forbidden)
-    }
-
     async fn require_owned_workspace_root(
         &mut self,
         permission: Permission,

@@ -2,7 +2,6 @@ import { api } from "./api.js";
 import { button, code, cursor, el, field, form, heading, input, message, paged, panel, short, submit, type ViewContext } from "./components.js";
 import type { Asset, Page, Run, RunEvent } from "./types.js";
 import { globalReviewPage } from "./global-knowledge.js";
-import { keysPage } from "./keys.js";
 import { editor } from "./asset-editor.js";
 
 const prefix = "/admin/deployment/workspaces";
@@ -166,8 +165,7 @@ export function deploymentConsole(root: HTMLElement, signal: AbortSignal, logout
       void api.get<{ single_key: boolean; items: { key_id: string }[] }>(`${base}/keys?limit=1`, viewSignal).then((page) => {
         if (viewSignal.aborted) return;
         if (!page.single_key) {
-          target.replaceChildren();
-          keysPage(target, { role: "admin", signal: viewSignal, navigate() {} }, workspace, base);
+          result.append(el("p", "muted", "此工作区尚未使用单 Key。"));
           return;
         }
         const state = el("p", "muted", page.items[0]?.key_id ?? "暂无有效 Key");

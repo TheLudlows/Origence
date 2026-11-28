@@ -489,7 +489,7 @@ async fn run_verification_is_external_claim_bound_to_prepared_v2_and_withdrawn_s
 }
 
 #[tokio::test]
-async fn deployment_admin_provisions_peer_workspaces_and_manages_scoped_keys() {
+async fn deployment_admin_provisions_and_rotates_only_single_workspace_keys() {
     let dir = tempfile::tempdir().unwrap();
     let service = open_service(dir.path(), Models::disabled()).await.unwrap();
     let store = service.engine.relational();
@@ -609,9 +609,8 @@ async fn deployment_admin_provisions_peer_workspaces_and_manages_scoped_keys() {
         .unwrap();
     assert_eq!(service.private_session(&after).await.unwrap(), session);
 
-    let peer_keys = format!("{path}/{}/keys", member.workspace_id);
-    let issued: Value = call(Method::POST, &peer_keys, &admin)
-        .json(&json!({"workspace_id":member.workspace_id,"role":"writer"}))
+    let legacy = format!("{path}/{}", member.workspace_id);
+    let legacy_keys: Value = call(Method::GET, &format!("{legacy}/keys"), &admin)
         .send()
         .await
         .unwrap()
@@ -620,61 +619,68 @@ async fn deployment_admin_provisions_peer_workspaces_and_manages_scoped_keys() {
         .json()
         .await
         .unwrap();
-    let writer = service
-        .auth(issued["token"].as_str().unwrap())
-        .await
-        .unwrap();
-    assert_eq!(writer.workspace_id, member.workspace_id);
-    assert_eq!(writer.role, "writer");
     assert_eq!(
-        call(Method::POST, &format!("{destination}/keys"), &admin)
-            .json(&json!({"workspace_id":workspace,"role":"writer"}))
+        legacy_keys,
+        json!({"single_key":false,"items":[],"next_after":null})
+    );
+    for (method, target, expected) in [
+        (
+            Method::POST,
+            format!("{legacy}/keys"),
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
+        (
+            Method::POST,
+            format!("{destination}/keys"),
+            StatusCode::METHOD_NOT_ALLOWED,
+        ),
+        (
+            Method::POST,
+            format!("{legacy}/keys/rotate"),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            Method::POST,
+            format!("{legacy}/keys/{}/rotate", member_admin.key_id),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            Method::DELETE,
+            format!("{legacy}/keys/{}", member_admin.key_id),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            Method::GET,
+            format!("{legacy}/workspace-key-grants"),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            Method::PUT,
+            format!("{legacy}/workspace-key-grants/{}", member_admin.key_id),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            Method::DELETE,
+            format!("{legacy}/workspace-key-grants/{}", member_admin.key_id),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            Method::GET,
+            "/v1/workspaces/owned".into(),
+            StatusCode::NOT_FOUND,
+        ),
+    ] {
+        let status = call(method, &target, &admin)
+            .json(&json!({"workspace_id":member.workspace_id,"role":"writer"}))
             .send()
             .await
             .unwrap()
-            .status(),
-        StatusCode::CONFLICT
-    );
+            .status();
+        assert_eq!(status, expected, "{target}");
+    }
     assert_eq!(
-        call(
-            Method::DELETE,
-            &format!("{peer_keys}/{}", first["key"]["key_id"].as_str().unwrap()),
-            &admin
-        )
-        .send()
-        .await
-        .unwrap()
-        .status(),
-        StatusCode::NOT_FOUND
-    );
-    let rotated: Value = call(
-        Method::POST,
-        &format!("{peer_keys}/{}/rotate", writer.id),
-        &admin,
-    )
-    .send()
-    .await
-    .unwrap()
-    .error_for_status()
-    .unwrap()
-    .json()
-    .await
-    .unwrap();
-    call(
-        Method::DELETE,
-        &format!("{peer_keys}/{}", rotated["key_id"].as_str().unwrap()),
-        &admin,
-    )
-    .send()
-    .await
-    .unwrap()
-    .error_for_status()
-    .unwrap();
-    assert!(
-        service
-            .auth(rotated["token"].as_str().unwrap())
-            .await
-            .is_err()
+        service.auth(&member_admin.token).await.unwrap().id,
+        member_admin.key_id
     );
     store.rotate_deployment_admin().await.unwrap();
     assert_eq!(

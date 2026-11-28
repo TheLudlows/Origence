@@ -60,11 +60,11 @@ Codex 用 `turn_id` 记录轮次，Claude Code 用 `prompt_id` 记录单个提�
 
 应用直接驱动的任务还可使用[受管 Run 上报](MANAGED-RUNS.md)。Codex App Server 提供命令状态及可用的退出码和耗时，Claude Agent SDK 提供取消回执及对应轮次的结果。
 
-## 多 workspace API 凭据
+## 旧版多工作区凭据
 
-同一逻辑 key 可在同租户的多个 workspace 获得各自的角色。HTTP 支持显式 workspace
-选择与授权枚举，在线 MCP 支持在连接启动时指定 workspace。会话记录仍按 workspace 和
-逻辑 key 隔离。原生客户端会话内工作区切换仍待接入。见 [API](API.md#身份与密钥管理)。
+控制台的 Key 管理由管理员在所选工作区执行单 Key 轮换。旧成员账号的工作区列表来自直接配置的凭据。
+依赖旧版多工作区凭据的集成仍可通过直连 HTTP 或 Rust 库使用现有授权。会话按工作区和逻辑 Key 隔离。
+见 [API](API.md#身份与密钥管理)。
 
 ## AnySeek 服务凭据与 workspace 集合
 

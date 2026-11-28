@@ -35,17 +35,31 @@ impl Service {
             .map_err(Into::into)
     }
 
-    pub async fn administer_deployment_keys(
+    pub async fn deployment_workspace_keys(
         &self,
         token: &str,
         workspace: Uuid,
-        operation: crate::storage::sqlite::DeploymentKeyOperation,
+        after: Uuid,
+        limit: u32,
     ) -> Result<Value> {
         self.engine
             .relational()
-            .administer_deployment_keys(token, workspace, operation)
+            .deployment_workspace_keys(token, workspace, after, limit)
             .await
             .map_err(Into::into)
+    }
+
+    pub async fn rotate_deployment_workspace_key(
+        &self,
+        token: &str,
+        workspace: Uuid,
+    ) -> Result<Value> {
+        let key = self
+            .engine
+            .relational()
+            .rotate_deployment_workspace_key(token, workspace)
+            .await?;
+        Ok(json!(key))
     }
 
     pub async fn authenticate_deployment_admin(&self, token: &str) -> Result<()> {

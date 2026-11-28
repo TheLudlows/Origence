@@ -33,14 +33,6 @@ interface Session {
 interface WorkspaceRoute {
   authorization: string;
   workspaceId: string;
-  principalId: string;
-  role: string;
-  scopedWorkspace?: string;
-}
-
-export interface OwnedWorkspace {
-  workspace_id: string;
-  name: string;
   role: string;
 }
 
@@ -98,7 +90,6 @@ export class ConsoleSessions {
   constructor(
     accounts: readonly ConsoleAccount[],
     private readonly identify: (authorization: string, signal: AbortSignal) => Promise<User | null>,
-    private readonly listOwned: (authorization: string, signal: AbortSignal) => Promise<OwnedWorkspace[] | null>,
     private readonly identifyDeployment: (authorization: string, signal: AbortSignal) => Promise<boolean>,
   ) {
     this.accounts = new Map(accounts.map((account) => [account.username, account]));
@@ -201,7 +192,6 @@ export class ConsoleSessions {
   private async profile(session: Session, signal: AbortSignal, identity?: User): Promise<ConsoleSession> {
     const workspaces: ConsoleWorkspace[] = [];
     const routes = new Map<string, WorkspaceRoute>();
-    const directIds = new Set(session.grants.map((grant) => grant.workspaceId));
     for (const grant of session.grants) {
       const user = identity ?? await this.identify(grant.authorization, signal);
       if (!user) continue;
@@ -210,24 +200,10 @@ export class ConsoleSessions {
         throw new HttpError(502, "控制台配置的工作区与上游身份不匹配");
       const workspace: ConsoleWorkspace = { ...user, name: grant.name };
       const route: WorkspaceRoute = {
-        authorization: grant.authorization, workspaceId: user.workspace_id, principalId: user.id, role: user.role,
+        authorization: grant.authorization, workspaceId: user.workspace_id, role: user.role,
       };
       workspaces.push(workspace);
       routes.set(user.workspace_id, route);
-      if (user.role !== "admin") continue;
-      const owned = await this.listOwned(grant.authorization, signal);
-      if (owned === null) continue;
-      for (const child of owned) {
-        if (directIds.has(child.workspace_id) || routes.has(child.workspace_id)) continue;
-        workspaces.push({ ...child, id: user.id });
-        routes.set(child.workspace_id, {
-          authorization: grant.authorization,
-          workspaceId: child.workspace_id,
-          principalId: user.id,
-          role: child.role,
-          scopedWorkspace: child.workspace_id,
-        });
-      }
     }
     session.routes = routes;
     return { account: session.account, binding: session.binding, workspaces };
@@ -311,7 +287,7 @@ export class ConsoleSessions {
   }
 }
 
-export function isConsoleRole(value: unknown): value is string {
+function isConsoleRole(value: unknown): value is string {
   return typeof value === "string" && roleNames.has(value);
 }
 

@@ -58,9 +58,9 @@ With a writable key, `origence-setup` [automatically archives sessions for the c
 Applications driving either client can use [managed Run reporting](MANAGED-RUNS.en.md)
 for Codex App Server command metadata and Claude Agent SDK cancellation.
 
-## Multi-workspace API credentials
+## Legacy multi-workspace credentials
 
-A logical key can have separate roles in several workspaces in the same tenant. HTTP supports explicit selection and grant listing. Online MCP connections can select a workspace at startup. Session records remain scoped by workspace and logical key. Native in-chat workspace switching is pending. See [identity and credential management](API.en.md#identity-and-credential-management).
+Administrators use the console to rotate the single key of the selected workspace. Existing member accounts list workspaces from directly configured credentials. Integrations that rely on legacy multi-workspace credentials retain direct HTTP and Rust library access. Sessions remain scoped by workspace and logical key. See [identity and credential management](API.en.md#identity-and-credential-management).
 
 ## AnySeek service credential and workspace collections
 

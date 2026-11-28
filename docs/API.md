@@ -153,11 +153,11 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 | `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | 原始问答及引用，按会话序号分页 |
 | `/admin/deployment/workspaces/{id}/runs` 和 `/admin/deployment/workspaces/{id}/runs/{run}` | Run 列表与事件 |
 | `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` 和 `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | 已发布内容目录与指定版本正文 |
-| `/admin/deployment/workspaces/{id}/keys` | 当前空间签发的 Key 元数据，包含 `single_key` |
+| `/admin/deployment/workspaces/{id}/keys` | 当前有效的单 Key 元数据，包含 `single_key`。旧凭据工作区返回 `single_key:false` 和空列表 |
 
 部署管理员用 `PUT /admin/deployment/workspaces/{id}` 提交 `{name}` 创建平级单 Key 工作空间，同一事务签发首把 Key。回执只在首次成功时返回 `key:{key_id,token}`，同 ID 同名重试返回 `created:false`。响应禁止缓存，未收到首次 Key 时可用 `POST /admin/deployment/workspaces/{id}/keys/rotate` 补发并撤销旧 Key，保留逻辑身份与会话。
 
-成员授权工作空间在 `/admin/deployment/workspaces/{id}` 下提供 `/keys` 和 `/workspace-key-grants`，方法与下面的工作区 Key 接口相同。管理员可以签发、轮换、撤销和调整授权。
+管理员控制台在选定工作区后提供单 Key 轮换。旧成员凭据仍可通过[工作区 Key 接口](#身份与密钥管理)直接使用和维护。
 
 以下路径相对于 `/admin/deployment/workspaces/{id}`。写入请求使用 `Idempotency-Key`，请求体与对应 `/v1` 接口一致。目标工作区由路径中的 `{id}` 决定。审计记录管理员凭据对应的内部标识，该标识在管理员凭据轮换时更新。
 
@@ -398,10 +398,6 @@ search/resolve 可选 memory_identity，格式为完整 `{subject,predicate,cont
 memories/identified 和 captures/identified 可选 expected_version（非负整数）。0 表示当前尚无已发布版本（可能已有未发布占位内容条目）；正数必须与受理事务中当前版本相同。不匹配返回 409，事务回滚且不新建来源或任务；负数 422。省略或 null 使用受理时的目标版本。显式写入可以追加版本，提取对已发布身份另存证据。
 
 可以将 lookup 的 version 传入写入接口，覆盖读取与受理之间的并发窗口。受理后 Worker 仍用受理版本复核，版本变化使任务失败，不保证同步发布成功。相同幂等键/相同完整请求的成功重放先返回原受理结果，不因之后版本变化变成冲突；改变 expected_version 属于改变请求，返回幂等冲突。省略/null 不进入规范请求 payload，保留旧键的重放兼容。
-
-## 既有所属工作区查询
-
-`GET /v1/workspaces/owned?limit=50&after=<UUID>` 为成员授权账号列出已存在且可访问的所属工作区，返回 `items` 和 `next_after`。每项包含 `workspace_id`、`name` 和有效 `role`。创建工作区由[部署管理员](#部署管理员)通过平级入口完成。
 
 ## 通用所属 workspace 与消息批次库接口
 

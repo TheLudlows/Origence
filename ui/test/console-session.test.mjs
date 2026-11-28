@@ -116,7 +116,7 @@ test("a workspace Key signs in without an account and stays scoped after reload"
   assert.equal((await request("/api/v1/assets", b)).status, 403);
   assert.deepEqual(await (await request("/api/admin/agents")).json(), { workspace_id: a, items: [] });
   assert.equal((await request("/api/admin/agents", b)).status, 403);
-  assert.equal((await request("/api/admin/keys")).status, 403);
+  assert.equal((await request("/api/admin/keys")).status, 404);
   assert.equal((await request("/api/admin/deployment/workspaces")).status, 403);
   assert.equal((await fetch(`${ui}/api/admin/deployment/global-knowledge/${a}/review`, {
     method: "POST",
@@ -146,10 +146,6 @@ test("account sessions survive reload and enforce grants, tenant credentials, re
       return res.end("{}");
     }
     if (req.url === "/v1/whoami") return res.end(JSON.stringify(identity));
-    if (req.url?.startsWith("/v1/workspaces/owned?")) {
-      res.statusCode = 403;
-      return res.end("{}");
-    }
     forwarded.push({ authorization, path: req.url, method: req.method, cookie: req.headers.cookie });
     res.end(JSON.stringify({ scoped_workspace: identity.workspace_id }));
   }), t);

@@ -1,10 +1,9 @@
 //! HTTP endpoints for deployment administrators.
 use super::http::{CursorPage, Upload, key, token, uncached_json};
 use crate::{
-    error::{AppError, Result},
+    error::Result,
     memory_semantics::SemanticMemoryInput,
     service::Service,
-    storage::sqlite::DeploymentKeyOperation,
     types::{IdentifiedMemoryInput, KnowledgeInput},
 };
 use axum::{
@@ -24,29 +23,10 @@ pub(super) fn routes() -> Router<Service> {
         .route("/admin/deployment/me", get(me))
         .route("/admin/deployment/workspaces", get(workspaces))
         .route("/admin/deployment/workspaces/{workspace}", put(provision))
-        .route(
-            "/admin/deployment/workspaces/{workspace}/keys",
-            get(keys).post(issue),
-        )
+        .route("/admin/deployment/workspaces/{workspace}/keys", get(keys))
         .route(
             "/admin/deployment/workspaces/{workspace}/keys/rotate",
-            post(rotate_single),
-        )
-        .route(
-            "/admin/deployment/workspaces/{workspace}/keys/{id}",
-            axum::routing::delete(revoke),
-        )
-        .route(
-            "/admin/deployment/workspaces/{workspace}/keys/{id}/rotate",
-            post(rotate),
-        )
-        .route(
-            "/admin/deployment/workspaces/{workspace}/workspace-key-grants",
-            get(grants),
-        )
-        .route(
-            "/admin/deployment/workspaces/{workspace}/workspace-key-grants/{id}",
-            put(set_grant).delete(revoke_grant),
+            post(rotate_key),
         )
         .route(
             "/admin/deployment/workspaces/{workspace}/sessions",
@@ -102,19 +82,6 @@ struct WorkspaceInput {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct IssueInput {
-    workspace_id: Uuid,
-    role: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct GrantInput {
-    role: String,
-}
-
-#[derive(Deserialize)]
 struct KeyPage {
     after: Option<Uuid>,
     limit: Option<u32>,
@@ -133,148 +100,34 @@ async fn provision(
     ))
 }
 
-async fn key_operation(
-    service: Service,
-    headers: HeaderMap,
-    workspace: Uuid,
-    operation: DeploymentKeyOperation,
-) -> Result<impl IntoResponse> {
-    Ok(uncached_json(
-        service
-            .administer_deployment_keys(token(&headers)?, workspace, operation)
-            .await?,
-    ))
-}
-
 async fn keys(
     State(service): State<Service>,
     headers: HeaderMap,
     Path(workspace): Path<Uuid>,
     Query(page): Query<KeyPage>,
 ) -> Result<impl IntoResponse> {
-    key_operation(
-        service,
-        headers,
-        workspace,
-        DeploymentKeyOperation::List {
-            after: page.after.unwrap_or_default(),
-            limit: page.limit.unwrap_or(50),
-        },
-    )
-    .await
+    Ok(uncached_json(
+        service
+            .deployment_workspace_keys(
+                token(&headers)?,
+                workspace,
+                page.after.unwrap_or_default(),
+                page.limit.unwrap_or(50),
+            )
+            .await?,
+    ))
 }
 
-async fn issue(
-    State(service): State<Service>,
-    headers: HeaderMap,
-    Path(workspace): Path<Uuid>,
-    Json(input): Json<IssueInput>,
-) -> Result<impl IntoResponse> {
-    if input.workspace_id != workspace {
-        return Err(AppError::Invalid("workspace target mismatch".into()));
-    }
-    key_operation(
-        service,
-        headers,
-        workspace,
-        DeploymentKeyOperation::Issue { role: input.role },
-    )
-    .await
-}
-
-async fn rotate_single(
+async fn rotate_key(
     State(service): State<Service>,
     headers: HeaderMap,
     Path(workspace): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    key_operation(
-        service,
-        headers,
-        workspace,
-        DeploymentKeyOperation::RotateSingle,
-    )
-    .await
-}
-
-async fn rotate(
-    State(service): State<Service>,
-    headers: HeaderMap,
-    Path((workspace, id)): Path<(Uuid, Uuid)>,
-) -> Result<impl IntoResponse> {
-    key_operation(
-        service,
-        headers,
-        workspace,
-        DeploymentKeyOperation::Rotate(id),
-    )
-    .await
-}
-
-async fn revoke(
-    State(service): State<Service>,
-    headers: HeaderMap,
-    Path((workspace, id)): Path<(Uuid, Uuid)>,
-) -> Result<impl IntoResponse> {
-    key_operation(
-        service,
-        headers,
-        workspace,
-        DeploymentKeyOperation::Revoke(id),
-    )
-    .await
-}
-
-async fn grants(
-    State(service): State<Service>,
-    headers: HeaderMap,
-    Path(workspace): Path<Uuid>,
-    Query(page): Query<KeyPage>,
-) -> Result<impl IntoResponse> {
-    key_operation(
-        service,
-        headers,
-        workspace,
-        DeploymentKeyOperation::ListGrants {
-            after: page.after.unwrap_or_default(),
-            limit: page.limit.unwrap_or(50),
-        },
-    )
-    .await
-}
-
-async fn set_grant(
-    State(service): State<Service>,
-    headers: HeaderMap,
-    Path((workspace, id)): Path<(Uuid, Uuid)>,
-    Json(input): Json<GrantInput>,
-) -> Result<impl IntoResponse> {
-    key_operation(
-        service,
-        headers,
-        workspace,
-        DeploymentKeyOperation::SetGrant {
-            logical_id: id,
-            role: Some(input.role),
-        },
-    )
-    .await
-}
-
-async fn revoke_grant(
-    State(service): State<Service>,
-    headers: HeaderMap,
-    Path((workspace, id)): Path<(Uuid, Uuid)>,
-) -> Result<impl IntoResponse> {
-    key_operation(
-        service,
-        headers,
-        workspace,
-        DeploymentKeyOperation::SetGrant {
-            logical_id: id,
-            role: None,
-        },
-    )
-    .await
+    Ok(uncached_json(
+        service
+            .rotate_deployment_workspace_key(token(&headers)?, workspace)
+            .await?,
+    ))
 }
 
 #[derive(Deserialize)]

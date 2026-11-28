@@ -54,23 +54,13 @@ impl SqliteTx {
     /// Rotate one live credential, retaining its logical identity and all archives.
     pub async fn rotate_scoped_key(&mut self, id: Uuid) -> StorageResult<IssuedKey> {
         self.check_permission(Permission::WorkspaceAdmin).await?;
-        self.rotate_scoped_key_inner(id, true).await
-    }
-
-    pub(super) async fn rotate_scoped_key_inner(
-        &mut self,
-        id: Uuid,
-        check_workspace_grants: bool,
-    ) -> StorageResult<IssuedKey> {
         let old:Option<(Uuid,String,bool,bool)>=sqlite_db::query_as("SELECT logical_key_id,role,allow_owned_workspaces,default_access FROM oc_api_keys WHERE tenant_id=? AND workspace_id=? AND id=? AND NOT revoked")
             .bind(self.scope.tenant_id).bind(self.scope.workspace_id).bind(id).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
         let (logical, role, capability, default_access) = old.ok_or(StorageError::NotFound)?;
         if role == "workspace" {
             return Err(StorageError::Forbidden);
         }
-        if check_workspace_grants {
-            self.authorize_granted_key_rotation(id, logical).await?;
-        }
+        self.authorize_granted_key_rotation(id, logical).await?;
         // A key may rotate itself only under this transaction's already-verified admin role.
         let key_id = Uuid::new_v4();
         let token = format!("oc_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());

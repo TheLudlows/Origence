@@ -109,11 +109,11 @@ A content item here is a versioned memory or knowledge entry identified by `asse
 | `/admin/deployment/workspaces/{id}/sessions/{session}/turns` | Original Q&A and references, paginated by session sequence |
 | `/admin/deployment/workspaces/{id}/runs` and `/admin/deployment/workspaces/{id}/runs/{run}` | Run directory and recorded events |
 | `/admin/deployment/workspaces/{id}/assets?kind=memory\|knowledge` and `/admin/deployment/workspaces/{id}/assets/{asset}?version=N` | Published content directory and versioned body |
-| `/admin/deployment/workspaces/{id}/keys` | Active key metadata for the selected workspace, including `single_key` |
+| `/admin/deployment/workspaces/{id}/keys` | Active single-key metadata, including `single_key`. A legacy workspace returns `single_key:false` and an empty list. |
 
 Use `PUT /admin/deployment/workspaces/{id}` with `{name}` to create a peer single-key workspace and issue its key in the same transaction. Only initial creation returns `key:{key_id,token}`. A retry with the same ID and name returns `created:false`. If the first credential is lost, `POST /admin/deployment/workspaces/{id}/keys/rotate` issues a replacement, revokes the previous key, and preserves logical identity and sessions.
 
-Membership-based workspaces expose `/keys` and `/workspace-key-grants` within `/admin/deployment/workspaces/{id}` using the methods of the workspace key endpoints below. Deployment administrators can issue, rotate, revoke, and update grants.
+The administrator console rotates the single key of the selected workspace. Existing member credentials can still be used and maintained through the [direct workspace key endpoints](#identity-and-credential-management).
 
 The following paths are relative to `/admin/deployment/workspaces/{id}`. Mutations use `Idempotency-Key` and the corresponding `/v1` request bodies. The `{id}` in the path selects the workspace. Audit entries record the administrator credential's internal identity, which changes on administrator credential rotation.
 
@@ -330,10 +330,6 @@ The complete identity first locates an authorized content item. Keyword/vector r
 memories/identified and captures/identified accept optional nonnegative expected_version. 0 requires no published version, while an unpublished reservation may exist. Positive values must equal the current version in the acceptance transaction. A mismatch returns 409 and rolls back without creating source or job. Negative values return 422. Omitted or null uses the target version at admission. Explicit writes can append a version. Extraction saves separate evidence for a published identity.
 
 Pass lookup's version to the write endpoint to cover the concurrency window between read and admission. After acceptance, the Worker still checks the admitted version. A change fails the job, and admission does not promise synchronous publication. A successful replay of the same idempotency key and request returns the original admission before checking later changes. A different expected_version changes the request and conflicts. Omitted and null are excluded from the canonical payload to preserve replay of existing keys.
-
-## Existing owned workspace listing
-
-`GET /v1/workspaces/owned?limit=50&after=<UUID>` returns the existing owned workspaces a membership-based account can access, as `items` and `next_after`. Each item includes `workspace_id`, `name`, and the effective `role`. The [deployment administrator](#deployment-administrator) creates peer workspaces through the deployment management endpoints.
 
 ## Common owning workspace and message batch library APIs
 
