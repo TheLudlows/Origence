@@ -4,6 +4,22 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · Retire legacy console key management and child workspace discovery
+
+Verified `3eb7daf8b220430406c5300781c697002c28c97f` on main base
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`, using Linux, Rust 1.98.0, Node 24.22.1, and isolated fresh stores.
+HTTP coverage includes rejection of retired administrator multi-key routes and owned workspace listing,
+single-key rotation, and continued access with existing legacy credentials.
+The full default-feature Rust suite passed 486 tests with eight configured skips.
+Formatting and strict all-target Clippy passed with all features, `sqlite` only, and no default features.
+The HTTP MCP smoke passed.
+
+All 34 UI tests and type checking passed. Chromium 156.0.8078.79 passed `check-key-management-browser.cjs`,
+`check-console-session-browser.cjs`, and `check-navigation-focus-browser.cjs` with synthetic data.
+The checks cover administrator sign-in and rotation in the selected workspace, denial of rotation for a workspace key,
+unaffected credentials in other workspaces, removal of automatic child workspace listing, and navigation focus and Tab order.
+Native Windows and GitHub CI are pending.
+
 ## 2026-11-28 · Administrator management of workspace memory and knowledge
 
 Implementation and browser checks used `b534ee9bf521e8e9e15830e06368a1e0ab68bcbd`, with main

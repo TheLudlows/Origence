@@ -7,6 +7,19 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 移除旧版控制台 Key 和子工作区入口
+
+验证提交 `3eb7daf8b220430406c5300781c697002c28c97f`，main 基线为
+`340aa501d101f7d0beebc6aa3b32a67b65ebc015`，使用 Linux、Rust 1.98.0、Node 24.22.1 和隔离新库。
+HTTP 测试覆盖已移除的管理员多 Key 操作和子工作区列表、保留的单 Key 轮换，以及旧凭据仍有效。
+默认特性的完整 Rust 测试通过 486 项，按配置忽略 8 项。
+格式检查及全目标严格 Clippy 通过，涵盖全特性、仅 `sqlite` 和无默认特性。HTTP MCP 冒烟通过。
+
+34 项 UI 测试和类型检查通过。Chromium 156.0.8078.79 使用合成数据通过 `check-key-management-browser.cjs`、
+`check-console-session-browser.cjs` 和 `check-navigation-focus-browser.cjs`。覆盖账号登录后轮换所选工作区 Key、
+普通 Key 无法调用轮换、其他工作区凭据仍然有效、界面不再自动列出子工作区，以及移除菜单后的导航焦点和 Tab 顺序。
+原生 Windows 和 GitHub CI 待验收。
+
 ## 2026-11-28 · 管理员在所选工作区管理记忆和知识
 
 代码和浏览器验证提交 `b534ee9bf521e8e9e15830e06368a1e0ab68bcbd`，合入 main
