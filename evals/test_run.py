@@ -66,8 +66,6 @@ import json,os,sys
 from http.server import HTTPServer,BaseHTTPRequestHandler
 assert os.environ['OC_ENABLE_MODELS']=='false'
 assert 'OC_API_KEY' not in os.environ and 'OC_MODEL_API_KEY' not in os.environ
-if 'workspace-create' in sys.argv:
- print(json.dumps({'token':'fixture-token'}));sys.exit()
 assets={}
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args):pass
@@ -77,6 +75,11 @@ class Handler(BaseHTTPRequestHandler):
   if self.path=='/health/ready':self.reply(200,{'status':'ready'})
   elif self.headers.get('Authorization')!='Bearer fixture-token':self.reply(401,{})
   else:self.reply(200,{'state':'completed','outcome':'published'})
+ def do_PUT(self):
+  if self.path.startswith('/admin/deployment/workspaces/') and self.headers.get('Authorization')=='Bearer '+os.environ['OC_DEPLOYMENT_ADMIN_KEY']:
+   self.reply(200,{'key':{'token':'fixture-token'}})
+  else:
+   self.reply(401,{})
  def do_POST(self):
   body=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
   if self.path=='/v1/knowledge':

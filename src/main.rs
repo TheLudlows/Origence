@@ -1,19 +1,12 @@
 use clap::{Parser, Subcommand};
 use origence::{
-    client::HostClient,
-    client_hook::{self, Client as HookClient, Profile as HookProfile},
-    client_skill::{SkillClient, export_skill},
+    client_hook::{self, Client as HookClient},
     host,
     models::Models,
     service::Service,
-    storage::{
-        KeyCapabilities, Lifecycle, RelationalStore, Scope, SqliteStore, anyseek::AnySeekConfig,
-    },
-    types::{AuthContext, ResolveInput, SearchInput},
+    storage::anyseek::AnySeekConfig,
 };
-use serde_json::json;
-use std::{future::Future, path::PathBuf, pin::Pin, time::Duration};
-use uuid::Uuid;
+use std::{future::Future, path::PathBuf, pin::Pin};
 
 #[derive(Parser)]
 #[command(version, about)]
@@ -27,22 +20,12 @@ struct Cli {
         global = true
     )]
     server_url: String,
-    /// Explicitly open local storage; requires exclusive access to the data directory.
-    #[arg(long, global = true)]
-    offline: bool,
     #[command(subcommand)]
     command: Command,
 }
+
 #[derive(Subcommand)]
 enum Command {
-    /// Print the exact configuration for a fresh AnySeek lexical collection.
-    AnyseekSchema {
-        #[arg(long)]
-        dimensions: Option<usize>,
-        /// Include the configured embedding space alongside the collection config.
-        #[arg(long)]
-        with_space: bool,
-    },
     /// Run the HTTP API and its single durable worker.
     #[command(alias = "api")]
     Serve {
@@ -56,118 +39,14 @@ enum Command {
         #[arg(long)]
         local: bool,
     },
-    /// Offline bootstrap: create a workspace and print its token once.
-    WorkspaceCreate {
-        name: String,
-        /// Create in the tenant of this existing workspace.
-        #[arg(long)]
-        in_tenant_of: Option<Uuid>,
-        /// Issue one workspace credential for Agent and console sign-in.
-        #[arg(long)]
-        workspace_key: bool,
-    },
-    /// Offline recovery or rotation of a workspace's single credential.
-    WorkspaceKeyRotate {
-        workspace_id: Uuid,
-    },
-    /// Offline issuance or rotation of the deployment administrator credential.
-    DeploymentAdminRotate,
-    KeyCreate {
-        workspace_id: Uuid,
-        #[arg(long, default_value = "reader")]
-        role: String,
-        /// Allow this root key to access one layer of owned workspaces.
-        #[arg(long)]
-        allow_owned_workspaces: bool,
-    },
-    KeyRevoke {
-        key_id: Uuid,
-    },
-    /// Verify a stopped, same-version private archive backup.
-    ArchiveVerify {
-        #[cfg(feature = "embedded-anyseek")]
-        #[arg(long)]
-        local: bool,
-        /// Assert that the stopped authority and AnySeek belong to a disposable copy.
-        #[arg(long)]
-        isolated_copy: bool,
-    },
-    /// Offline inspection of the current SQLite identity schema; never migrates a database.
-    IdentityCheck,
-    /// Capture opt-in client hooks or send their private queue to the host.
-    ClientHook {
-        #[arg(long)]
-        profile: PathBuf,
-        #[command(subcommand)]
-        action: HookAction,
-    },
     /// Capture Run metadata for an installed client plugin.
     PluginHook {
         #[arg(long, value_enum)]
         client: HookClient,
     },
-    /// Export one approved Skill copy into a Claude Code or Codex project.
-    SkillExport {
-        #[arg(long, value_enum)]
-        client: SkillClient,
-        #[arg(long)]
-        project: PathBuf,
-        #[arg(long)]
-        tenant_id: Uuid,
-        #[arg(long)]
-        workspace_id: Uuid,
-        skill_id: Uuid,
-        version: u32,
-    },
-    Search {
-        query: String,
-        #[arg(long, default_value = "keyword")]
-        mode: String,
-        #[arg(long, default_value_t = 10)]
-        limit: usize,
-        #[arg(long)]
-        allow_partial: bool,
-    },
-    Resolve {
-        query: String,
-        #[arg(long, default_value = "keyword")]
-        mode: String,
-        #[arg(long, default_value_t = 2000)]
-        budget_tokens: usize,
-        #[arg(long)]
-        allow_partial: bool,
-    },
-    Get {
-        asset_id: Uuid,
-        #[arg(long)]
-        version: Option<i32>,
-    },
-}
-#[derive(Subcommand)]
-enum HookAction {
-    /// Read hook stdin and enqueue only allowlisted metadata. Never sends HTTP.
-    Capture {
-        #[arg(long, value_enum)]
-        client: HookClient,
-    },
-    /// Send one batch, or repeat in a process independent of the client.
-    Flush {
-        #[arg(long)]
-        watch: bool,
-    },
-    /// Resolve an explicit MCP binding from reliable identifiers for a turn.
-    RunId {
-        #[arg(long, value_enum)]
-        client: HookClient,
-        #[arg(long)]
-        session_id: String,
-        /// Codex turn_id or Claude Code prompt_id.
-        #[arg(long)]
-        correlation_id: String,
-    },
 }
 
-type CommandFuture<'a, T> = Pin<Box<dyn Future<Output = anyhow::Result<T>> + 'a>>;
+type CommandFuture = Pin<Box<dyn Future<Output = anyhow::Result<()>>>>;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -192,40 +71,13 @@ fn init_tracing() -> anyhow::Result<()> {
 
 // Select and allocate one command future synchronously. Unrelated commands then
 // have separate poll functions instead of sharing the CLI's async stack frame.
-fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
+fn dispatch(cli: Cli) -> CommandFuture {
     let Cli {
         data_dir,
         server_url,
-        offline,
         command,
     } = cli;
     match command {
-        Command::AnyseekSchema {
-            dimensions,
-            with_space,
-        } => Box::pin(async move {
-            let models = with_space.then(Models::from_env).transpose()?;
-            let configured_dimension = models
-                .as_ref()
-                .and_then(|m| m.profile.as_ref().map(|_| m.embedding_dimension()));
-            if with_space && dimensions.is_some() && dimensions != configured_dimension {
-                anyhow::bail!("dimensions must match the configured embedding model");
-            }
-            let dimension = dimensions.or(configured_dimension);
-            let config = match dimension {
-                Some(d) => {
-                    origence::storage::anyseek::AnySeekFullTextStore::vector_collection_config(d)?
-                }
-                None => origence::storage::anyseek::AnySeekFullTextStore::collection_config(),
-            };
-            let output = if let Some(models) = models {
-                json!({"config":config,"embedding_space_id":models.profile})
-            } else {
-                config
-            };
-            println!("{output}");
-            Ok(())
-        }),
         Command::Serve {
             bind,
             mcp_public_origin,
@@ -248,6 +100,10 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             #[cfg(not(feature = "embedded-anyseek"))]
             let service =
                 Service::open_with_anyseek(&data_dir, models, AnySeekConfig::from_env()?).await?;
+            if let Err(error) = host::initialize_deployment_admin(&service).await {
+                service.engine.shutdown().await?;
+                return Err(error);
+            }
             match tokio::net::TcpListener::bind(bind).await {
                 Ok(listener) => {
                     host::serve_http_with_mcp(service, listener, mcp, host::shutdown_signal()).await
@@ -258,39 +114,6 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
                 }
             }
         }),
-        Command::ArchiveVerify {
-            #[cfg(feature = "embedded-anyseek")]
-            local,
-            isolated_copy,
-        } => Box::pin(async move {
-            anyhow::ensure!(
-                offline && isolated_copy,
-                "archive-verify requires --offline and --isolated-copy"
-            );
-            use origence::archive_maintenance;
-            let models = Models::from_env()?;
-            #[cfg(feature = "embedded-anyseek")]
-            let result = if local {
-                archive_maintenance::run_embedded(&data_dir, models).await?
-            } else {
-                archive_maintenance::run(&data_dir, models, AnySeekConfig::from_env()?).await?
-            };
-            #[cfg(not(feature = "embedded-anyseek"))]
-            let result =
-                archive_maintenance::run(&data_dir, models, AnySeekConfig::from_env()?).await?;
-            println!("{result}");
-            Ok(())
-        }),
-        Command::IdentityCheck => Box::pin(async move {
-            anyhow::ensure!(
-                offline,
-                "identity-check requires --offline and a stopped host"
-            );
-            SqliteStore::check_memory_identity(data_dir.join("context.db")).await?;
-            println!("{}", json!({"feature":"memory-identity-v1","valid":true}));
-            Ok(())
-        }),
-        Command::ClientHook { profile, action } => Box::pin(run_client_hook(profile, action)),
         Command::PluginHook { client } => Box::pin(async move {
             match client_hook::capture_plugin_event(client, &server_url).await {
                 Ok(report) => {
@@ -306,341 +129,5 @@ fn dispatch(cli: Cli) -> CommandFuture<'static, ()> {
             println!("{{}}");
             Ok(())
         }),
-        command @ (Command::WorkspaceCreate { .. }
-        | Command::WorkspaceKeyRotate { .. }
-        | Command::DeploymentAdminRotate
-        | Command::KeyCreate { .. }
-        | Command::KeyRevoke { .. })
-            if offline =>
-        {
-            Box::pin(run_admin(data_dir, command))
-        }
-        Command::SkillExport { .. } if offline => {
-            Box::pin(async { anyhow::bail!("skill-export requires an online Origence host") })
-        }
-        command if offline => Box::pin(run_offline(data_dir, command)),
-        command => Box::pin(run_remote(server_url, command)),
     }
-}
-
-async fn run_client_hook(path: PathBuf, action: HookAction) -> anyhow::Result<()> {
-    if let HookAction::Capture { client } = action {
-        let capture = tokio::task::spawn_blocking(move || {
-            let Some(profile) = HookProfile::load(&path)?.filter(|p| p.enabled(client)) else {
-                return Ok(client_hook::Capture::Ignored);
-            };
-            let token = hook_token(&profile)?;
-            profile.enqueue(
-                client,
-                &token,
-                &std::env::current_dir()?,
-                std::io::stdin().lock(),
-            )
-        })
-        .await?;
-        match capture {
-            Ok(client_hook::Capture::MissingIdentity) => {
-                eprintln!("Origence hook: missing reliable event or turn identity")
-            }
-            Ok(client_hook::Capture::Full) => {
-                eprintln!("Origence hook: observation skipped because the queue is full")
-            }
-            Err(error) => eprintln!("Origence hook: observation skipped ({error})"),
-            _ => {}
-        }
-        // A neutral response for Codex Stop and other command-hook schemas.
-        println!("{{}}");
-        return Ok(());
-    }
-
-    let mut previous = None;
-    loop {
-        let profile_path = path.clone();
-        let Some(profile) =
-            tokio::task::spawn_blocking(move || HookProfile::load(&profile_path)).await??
-        else {
-            return Ok(());
-        };
-        match &action {
-            HookAction::RunId {
-                client,
-                session_id,
-                correlation_id,
-            } => {
-                let run = profile
-                    .run_identity(*client, session_id, correlation_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("hook client disabled or missing reliable identity")
-                    })?;
-                println!("{}", serde_json::to_string(&run)?);
-                return Ok(());
-            }
-            HookAction::Flush { watch } => {
-                let token = hook_token(&profile)?;
-                let report = match profile.flush(token).await {
-                    Ok(report) => report,
-                    Err(error) if *watch => {
-                        eprintln!("Origence hook sender: local queue unavailable ({error})");
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                        continue;
-                    }
-                    Err(error) => return Err(error),
-                };
-                if !watch
-                    || report.sent > 0
-                    || report.discarded > 0
-                    || previous.as_ref() != Some(&report)
-                {
-                    println!("{}", serde_json::to_string(&report)?);
-                }
-                if !watch {
-                    return Ok(());
-                }
-                let wait = if report.sent + report.discarded > 0 {
-                    Duration::from_millis(250)
-                } else {
-                    Duration::from_secs(5)
-                };
-                previous = Some(report);
-                tokio::time::sleep(wait).await;
-            }
-            HookAction::Capture { .. } => unreachable!(),
-        }
-    }
-}
-
-fn hook_token(profile: &HookProfile) -> anyhow::Result<String> {
-    std::env::var(profile.key_env()).map_err(|_| anyhow::anyhow!("hook credential is unavailable"))
-}
-
-async fn run_admin(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
-    tokio::fs::create_dir_all(&data_dir).await?;
-    let store = SqliteStore::open(data_dir.join("context.db")).await?;
-    let result = match command {
-        Command::WorkspaceCreate {
-            name,
-            in_tenant_of,
-            workspace_key,
-        } => {
-            anyhow::ensure!(!name.trim().is_empty(), "name is required");
-            let scope = Scope {
-                tenant_id: match in_tenant_of {
-                    Some(workspace) => store.workspace_scope(workspace).await?.tenant_id,
-                    None => Uuid::new_v4(),
-                },
-                workspace_id: Uuid::new_v4(),
-            };
-            let key = if workspace_key {
-                store.create_key_workspace(scope, &name).await?
-            } else {
-                store
-                    .create_workspace(scope.tenant_id, scope.workspace_id, &name)
-                    .await?;
-                store.issue_key(scope, "admin").await?
-            };
-            json!({"tenant_id":scope.tenant_id,"workspace_id":scope.workspace_id,"key_id":key.key_id,"token":key.token})
-        }
-        Command::WorkspaceKeyRotate { workspace_id } => {
-            let scope = store.workspace_scope(workspace_id).await?;
-            json!(store.rotate_workspace_key(scope).await?)
-        }
-        Command::DeploymentAdminRotate => json!({"token":store.rotate_deployment_admin().await?}),
-        Command::KeyCreate {
-            workspace_id,
-            role,
-            allow_owned_workspaces,
-        } => json!(
-            store
-                .issue_key_with_capabilities(
-                    store.workspace_scope(workspace_id).await?,
-                    &role,
-                    KeyCapabilities {
-                        allow_owned_workspaces
-                    },
-                )
-                .await?
-        ),
-        Command::KeyRevoke { key_id } => {
-            store.revoke_key(key_id).await?;
-            json!({"key_id":key_id,"revoked":true})
-        }
-        _ => unreachable!(),
-    };
-    store.shutdown().await?;
-    println!("{result}");
-    Ok(())
-}
-
-async fn run_offline(data_dir: PathBuf, command: Command) -> anyhow::Result<()> {
-    let token =
-        std::env::var("OC_API_KEY").map_err(|_| anyhow::anyhow!("OC_API_KEY is required"))?;
-    let service =
-        Service::open_with_anyseek(&data_dir, Models::from_env()?, AnySeekConfig::from_env()?)
-            .await?;
-    let auth = service.auth(&token).await?;
-    let result = offline_command(&service, &auth, command).await?;
-    service.engine.shutdown().await?;
-    println!("{result}");
-    Ok(())
-}
-
-// Search/resolve futures also remain independent: their construction and
-// serialization temporaries do not share run_offline's poll frame.
-fn offline_command<'a>(
-    service: &'a Service,
-    auth: &'a AuthContext,
-    command: Command,
-) -> CommandFuture<'a, serde_json::Value> {
-    match command {
-        Command::Search {
-            query,
-            mode,
-            limit,
-            allow_partial,
-        } => Box::pin(async move {
-            Ok(service
-                .search(
-                    auth,
-                    SearchInput {
-                        components: Default::default(),
-                        memory_identity: None,
-                        query,
-                        mode,
-                        limit,
-                        allow_partial,
-                    },
-                )
-                .await?)
-        }),
-        Command::Resolve {
-            query,
-            mode,
-            budget_tokens,
-            allow_partial,
-        } => Box::pin(async move {
-            Ok(service
-                .resolve(
-                    auth,
-                    ResolveInput {
-                        components: Default::default(),
-                        memory_identity: None,
-                        query,
-                        mode,
-                        budget_tokens,
-                        allow_partial,
-                    },
-                )
-                .await?)
-        }),
-        Command::Get { asset_id, version } => {
-            Box::pin(async move { Ok(service.get(auth, asset_id, version).await?) })
-        }
-        _ => unreachable!(),
-    }
-}
-
-async fn run_remote(server_url: String, command: Command) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        !matches!(
-            command,
-            Command::WorkspaceCreate { .. }
-                | Command::WorkspaceKeyRotate { .. }
-                | Command::DeploymentAdminRotate
-        ),
-        "provisioning and offline key rotation require --offline and a stopped host"
-    );
-    let token = std::env::var("OC_API_KEY")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| anyhow::anyhow!("OC_API_KEY is required"))?;
-    let client = HostClient::new(&server_url, token)?;
-    let (method, path, body) = match command {
-        Command::SkillExport {
-            client: target,
-            project,
-            tenant_id,
-            workspace_id,
-            skill_id,
-            version,
-        } => {
-            let path = export_skill(
-                &client,
-                target,
-                &project,
-                Scope {
-                    tenant_id,
-                    workspace_id,
-                },
-                skill_id,
-                version,
-            )
-            .await?;
-            println!(
-                "{}",
-                json!({"skill_id":skill_id,"version":version,"path":path,"exported":true})
-            );
-            return Ok(());
-        }
-        Command::Search {
-            query,
-            mode,
-            limit,
-            allow_partial,
-        } => (
-            reqwest::Method::POST,
-            "/v1/search".into(),
-            Some(json!(SearchInput {
-                components: Default::default(),
-                memory_identity: None,
-                query,
-                mode,
-                limit,
-                allow_partial
-            })),
-        ),
-        Command::Resolve {
-            query,
-            mode,
-            budget_tokens,
-            allow_partial,
-        } => (
-            reqwest::Method::POST,
-            "/v1/resolve".into(),
-            Some(json!(ResolveInput {
-                components: Default::default(),
-                memory_identity: None,
-                query,
-                mode,
-                budget_tokens,
-                allow_partial
-            })),
-        ),
-        Command::Get { asset_id, version } => (
-            reqwest::Method::GET,
-            format!(
-                "/v1/assets/{asset_id}{}",
-                version.map(|v| format!("?version={v}")).unwrap_or_default()
-            ),
-            None,
-        ),
-        Command::KeyCreate {
-            workspace_id,
-            role,
-            allow_owned_workspaces,
-        } => (
-            reqwest::Method::POST,
-            "/admin/keys".into(),
-            Some(
-                json!({"workspace_id":workspace_id,"role":role,"allow_owned_workspaces":allow_owned_workspaces}),
-            ),
-        ),
-        Command::KeyRevoke { key_id } => (
-            reqwest::Method::DELETE,
-            format!("/admin/keys/{key_id}"),
-            None,
-        ),
-        _ => unreachable!(),
-    };
-    println!("{}", client.call(method, &path, body.as_ref(), None).await?);
-    Ok(())
 }

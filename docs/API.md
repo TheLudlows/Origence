@@ -119,13 +119,13 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 现有 HTTP/MCP 图检索契约不变。
 
 - `SqliteStore::check_memory_identity(path)` 对已有路径执行只读、独占锁下的完整同版本
-  schema 检查，不创建或修复表；CLI 为 `--offline identity-check`。
+  schema 检查，不创建或修复表。
 - 命令幂等、作业执行和 artifact owner/index/ledger 各有独立职责，见[存储不变量](contracts/storage.md)。
 - 所属 workspace 与消息批次接口见下文；外部协议字段不能进入通用存储或授权判断。
 
 ## 角色
 
-使用 `--offline workspace-create --workspace-key <名称>` 创建的工作空间使用一把固定绑定的有效 Key。认证响应的 `role` 为 `workspace`，用于标识这一凭据类型。Key 能在本空间读取和管理业务内容，包括删除记忆。原始会话可读取和追加归档，删除轮次、清空会话及通过来源接口删除会话均返回 403。空间管理和角色授权接口仅对各自的管理员开放。轮换使用 `--offline workspace-key-rotate <工作空间 ID>`。
+部署管理员创建的单 Key 工作空间使用一把固定绑定的有效 Key。认证响应的 `role` 为 `workspace`，用于标识这一凭据类型。Key 能在本空间读取和管理业务内容，包括删除记忆。原始会话可读取和追加归档，删除轮次、清空会话及通过来源接口删除会话均返回 403。空间管理和角色授权接口仅对各自的管理员开放。部署管理员可通过 `POST /admin/deployment/workspaces/{id}/keys/rotate` 轮换。
 
 已有角色管理路径的权限表如下。
 
@@ -143,7 +143,7 @@ chunk IDs 筛选，返回前再复核权威状态。向量候选核对额外包�
 
 ### 部署管理员
 
-`origence --offline deployment-admin-rotate` 签发或轮换独立凭据。部署管理接口接受该 Bearer Key。控制台初始化的管理员账号在服务端使用部署凭据。
+`origence serve` 首次启动时登记部署管理员凭据。部署管理接口接受该 Bearer Key。控制台初始化的管理员账号在服务端使用部署凭据。
 
 | GET 路径 | 数据 |
 | --- | --- |
@@ -354,7 +354,7 @@ subject kind 支持 user/agent/project/service/team；stable_id 是业务稳定�
 
 lookup 接收上述 identity 对象（无 content），在 key 的 scope 内精确查找，不接受别名/语义近似。未命中、未发布、已删除或来源撤回均为 404，不回退旧版本或创建任何内容条目/来源/任务。缺失身份表不是合法的未命中或空结果。返回 version 不是后续写入锁，最终以 job 的版本检查为准；reader 不能借此读取原始 capture 输入。
 
-新建库始终包含完整身份 schema；启动拒绝缺表或不兼容库，不提供缺表时仅开放旧接口的降级模式，也不自动安装或升级。只读检查步骤见 [OPERATIONS](OPERATIONS.md#离线记忆身份检查)。旧 captures 仍用 fact_key；显式写入/capture 使用 HTTP。只读 MCP 支持 memory_identity 检索，CLI 默认不带该过滤。
+新建库始终包含完整身份 schema；启动拒绝缺表或不兼容库，不提供缺表时仅开放旧接口的降级模式，也不自动安装或升级。只读检查步骤见 [OPERATIONS](OPERATIONS.md#记忆身份检查)。旧 captures 仍用 fact_key；显式写入/capture 使用 HTTP。只读 MCP 支持 memory_identity 检索。
 
 ## 单身份 capture
 
@@ -380,7 +380,7 @@ resolve 的 chunk 引用及正文前 JSON 标注包含 kind、identity、normali
 
 search/resolve 可选 memory_identity，格式为完整 `{subject,predicate,context:{}}`，省略时沿用混合检索。启用后只保留当前 scope 内完整身份精确相同的 memory；排除旧未识别记忆、知识块和图扩展。字段在模型调用前校验，不接受别名/语义近似/部分条件匹配；未知字段拒绝，非法身份 422，未命中为空结果。身份不替代鉴权，结果仍受当前版本、来源和墓碑规则约束。完整当前 schema 中没有显式绑定则不匹配；缺失身份表属于存储错误，不作为空结果返回，也不自动升级。
 
-完整身份先定位授权内容条目，keyword/vector 候选限定于该内容条目后排序和截断，最终重新校验版本、来源、墓碑及权限。无身份查询仍有各分支候选上限；身份限定不保证语义召回。只需定位当前内容条目时用 lookup。响应回显 memory_identity，resolve 透传过滤；HTTP/MCP 支持，CLI 默认不带过滤。
+完整身份先定位授权内容条目，keyword/vector 候选限定于该内容条目后排序和截断，最终重新校验版本、来源、墓碑及权限。无身份查询仍有各分支候选上限；身份限定不保证语义召回。只需定位当前内容条目时用 lookup。响应回显 memory_identity，resolve 透传过滤；HTTP/MCP 支持。
 
 ## 显式写入的调用方版本前置条件
 

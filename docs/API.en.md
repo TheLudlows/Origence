@@ -75,13 +75,13 @@ The local embedded host is built through `Service::open_embedded(dir, models)`. 
 
 The old standalone graph storage API and graph traversal were removed. `StorageEngine::new` no longer accepts graph storage, and `SqliteStore::cleanup_plan` returns only chunk IDs for cleanup. The existing HTTP/MCP graph-retrieval contract remains.
 
-- `SqliteStore::check_memory_identity(path)` performs a full same-version schema check on an existing path under a read-only exclusive lock. It neither creates nor repairs tables. CLI `--offline identity-check`.
+- `SqliteStore::check_memory_identity(path)` performs a full same-version schema check on an existing path under a read-only exclusive lock. It neither creates nor repairs tables.
 - Command idempotency, job execution, and artifact owner/index/ledger responsibilities are distinct. See [storage invariants](contracts/storage.en.md).
 - The owning workspace and message batch APIs are below. External protocol fields cannot enter generic storage or authorization decisions.
 
 ## Roles
 
-The `--offline workspace-create --workspace-key <name>` command provisions one active key bound to its workspace. Authentication returns `role: "workspace"` to identify this credential type. It permits content operations in that workspace, including memory deletion. Original turns support append and read. Deleting a turn, clearing a session, or deleting a turn through the source endpoint returns 403. Workspace and role-grant management retain their administrator checks. Use `--offline workspace-key-rotate <workspace-id>` to rotate the key.
+A single-key workspace provisioned by the deployment administrator has one active key bound to the workspace. Authentication returns `role: "workspace"` to identify this credential type. It permits content operations in that workspace, including memory deletion. Original turns support append and read. Deleting a turn, clearing a session, or deleting a turn through the source endpoint returns 403. Workspace and role-grant management retain their administrator checks. The deployment administrator can rotate it through `POST /admin/deployment/workspaces/{id}/keys/rotate`.
 
 Existing role-based paths use the following permission table.
 
@@ -99,7 +99,7 @@ A content item here is a versioned memory or knowledge entry identified by `asse
 
 ### Deployment administrator
 
-`origence --offline deployment-admin-rotate` issues or rotates the separate administrator credential. The deployment management endpoints accept this bearer key. The initialized console administrator uses the deployment credential on the server side.
+`origence serve` registers the deployment administrator credential on first startup. The deployment management endpoints accept this bearer key. The initialized console administrator uses the deployment credential on the server side.
 
 | GET path | Data |
 | --- | --- |
@@ -286,7 +286,7 @@ Content item reads add `identity`, null for legacy memory or knowledge. Identity
 
 lookup accepts the identity above without content and matches exactly in the key's scope. Aliases and semantic approximations are unsupported. Missing, unpublished, deleted, or source-withdrawn content items return 404, without falling back or creating content items, sources, or jobs. A missing identity table is an error, not a valid miss or empty result. The returned version is not a write lock. The final job version check remains authoritative, and reader cannot access original capture input through lookup.
 
-New databases always contain the complete identity schema. Startup rejects absent tables and incompatible databases. It neither falls back to legacy-only endpoints nor installs or upgrades automatically. See [OPERATIONS](OPERATIONS.en.md#offline-memory-identity-check) for the read-only check. Legacy captures still use fact_key and explicit write/capture uses HTTP. Read-only MCP supports memory_identity filtering. CLI does not set it by default.
+New databases always contain the complete identity schema. Startup rejects absent tables and incompatible databases. It neither falls back to legacy-only endpoints nor installs or upgrades automatically. See [OPERATIONS](OPERATIONS.en.md#memory-identity-checks) for the read-only check. Legacy captures still use fact_key and explicit write/capture uses HTTP. Read-only MCP supports memory_identity filtering.
 
 ## Capture for one identity
 

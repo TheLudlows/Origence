@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise private archives through the Origence CLI, HTTP and MCP entry points."""
+"""Exercise private archives through Origence HTTP, MCP and the Rust backup verifier."""
 import argparse
 import base64
 import concurrent.futures
@@ -23,6 +23,7 @@ import uuid
 
 from anyseek_smoke import wait_ready
 from mcp_smoke import Host, Mcp, isolated_env
+from native_fixture import run as native_fixture, workspace as seed_workspace
 
 MARKER = "privatearchiveneedle"
 ANSWER = "Synthetic archive answer Café 审批 🦀"
@@ -183,9 +184,9 @@ def native(binary, directory, port, secret):
             assert MARKER.encode() not in data and key.encode() not in data
 
 
-def command(binary, env, *args, ok=True):
-    child = subprocess.run([binary, "--offline", *args], env=env, capture_output=True, timeout=120)
-    assert (child.returncode == 0) == ok, "offline command status did not match"
+def archive_manifest(env, embedded, ok=True):
+    child = native_fixture(env, "archive_manifest", embedded=embedded)
+    assert (child.returncode == 0) == ok, "backup verifier status did not match"
     assert MARKER.encode() not in child.stderr
     return json.loads(child.stdout) if ok else None
 
@@ -235,9 +236,8 @@ def run_contract(binary, root, model, anyseek):
             proxy.release = threading.Event()
             env.update(OC_ANYSEEK_URL=proxy_url, OC_ANYSEEK_API_KEY=key)
             forbidden.append(key)
-        owner = command(binary, env, "workspace-create", "private fixture")
-        foreign = command(binary, env, "workspace-create", "second workspace", "--in-tenant-of",
-                          owner["workspace_id"])
+        owner = seed_workspace(env, "private fixture")
+        foreign = seed_workspace(env, "second workspace", owner["workspace_id"])
         token = owner["token"]
         forbidden.extend([token, foreign["token"]])
         turn = new_turn(MARKER + " Café question")
@@ -448,8 +448,7 @@ def run_contract(binary, root, model, anyseek):
 
         token = replacement
         check(directory, [MARKER, ANSWER, "unwrittenpendingneedle", "lostreceiptneedle"])
-        params = [*args, "--isolated-copy"]
-        manifest = command(binary, env, "archive-verify", *params)
+        manifest = archive_manifest(env, not anyseek)
         assert manifest["format"] == "origence-private-archive-restore-v2"
         assert manifest["archived"] >= 2 and len(manifest["directory_sha256"]) == 64
         with database(directory) as db:
@@ -465,8 +464,7 @@ def run_contract(binary, root, model, anyseek):
         if not anyseek:
             incomplete = root / "authority-only"
             shutil.copytree(directory, incomplete, ignore=shutil.ignore_patterns("anyseek"))
-            command(binary, dict(env, OC_DATA_DIR=str(incomplete)), "archive-verify",
-                    *params, ok=False)
+            archive_manifest(dict(env, OC_DATA_DIR=str(incomplete)), True, ok=False)
         if anyseek:
             stack.close()
             native_copy = root / "restored-native"
@@ -481,7 +479,7 @@ def run_contract(binary, root, model, anyseek):
             stack.callback(proxy_server.server_close)
             stack.callback(proxy_server.shutdown)
         restore_env = dict(env, OC_DATA_DIR=str(restored))
-        restored_manifest = command(binary, restore_env, "archive-verify", *params)
+        restored_manifest = archive_manifest(restore_env, not anyseek)
         assert restored_manifest == manifest
         with start(env=restore_env) as host:
             assert host.request(route + "/" + turn["turn_id"])["answer"] == ANSWER

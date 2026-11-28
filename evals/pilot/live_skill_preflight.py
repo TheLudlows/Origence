@@ -21,6 +21,7 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
 from live_archive_smoke import CLAUDE_ENV, child_environment
+from native_fixture import run as native_fixture, workspace as seed_workspace
 from mcp_smoke import Host, isolated_env, require
 
 
@@ -92,15 +93,13 @@ def publish_from_source(host, space, reviewer, name, description, body, source):
     }
 
 
-def export(binary, host, key, project, client, package):
+def export(host, key, project, client, package):
     manifest = package["manifest"]
     project.mkdir()
-    result = subprocess.run([binary, "--server-url", host.base, "skill-export", "--client", client,
-                             "--project", str(project), "--tenant-id", manifest["tenant_id"],
-                             "--workspace-id", manifest["workspace_id"], manifest["skill_id"],
-                             str(manifest["version"])], env=dict(child_environment(), OC_API_KEY=key),
-                            capture_output=True, timeout=15)
-    return result
+    return native_fixture(dict(child_environment(), OC_API_KEY=key, OC_SERVER_URL=host.base),
+                          "install_skill", client=client, project=str(project),
+                          tenant=manifest["tenant_id"], workspace=manifest["workspace_id"],
+                          skill=manifest["skill_id"], version=manifest["version"])
 
 
 def installed(project, client, package):
@@ -296,9 +295,7 @@ def probe(args, report):
         root = Path(tmp)
         env = isolated_env(tmp)
         require("OC_ANYSEEK_API_KEY" in env, "run under tools/anyseek_smoke.py")
-        boot = subprocess.run([args.binary, "--offline", "workspace-create", "skill-preflight"],
-                              cwd=root, env=env, capture_output=True, check=True, timeout=15)
-        space = json.loads(boot.stdout)
+        space = seed_workspace(env, "skill-preflight")
         admin = space["token"]
         with Host(args.binary, env, admin, [admin, env["OC_ANYSEEK_API_KEY"]]) as host:
             def issue(role):
@@ -320,7 +317,7 @@ def probe(args, report):
                 jobs = {}
                 for client, load in (("codex", codex_load), ("claude-code", claude_load)):
                     project = root / client
-                    exported = export(args.binary, host, writer["token"], project, client, package)
+                    exported = export(host, writer["token"], project, client, package)
                     require(exported.returncode == 0, "export failed")
                     paths[client] = installed(project, client, package)
                     run = uid()
@@ -373,7 +370,7 @@ def probe(args, report):
             report["withdrawal"] = {}
             for client in paths:
                 fresh = root / ("withdrawn-" + client)
-                denied = export(args.binary, host, writer["token"], fresh, client, package)
+                denied = export(host, writer["token"], fresh, client, package)
                 reason = b"resource not found" if report["withdrawn_package_http"] == 404 else b"permission denied"
                 require(denied.returncode != 0 and reason in denied.stderr.lower(),
                         "export did not report the expected withdrawal error")

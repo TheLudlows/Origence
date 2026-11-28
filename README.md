@@ -28,15 +28,10 @@ Choose a fresh data directory for this quick start.
 ```sh
 cargo build --locked
 export OC_DATA_DIR="$(mktemp -d)"
-./target/debug/origence --offline workspace-create --workspace-key demo
-./target/debug/origence --offline deployment-admin-rotate
 ./target/debug/origence serve --local
 ```
 
-Use the key returned by `workspace-create` to sign into the workspace or connect an Agent.
-The deployment administrator can create peer workspaces, manage their keys, and moderate global knowledge.
-Origence opens the embedded AnySeek catalog under `$OC_DATA_DIR/anyseek` and
-initializes workspace collections on first use.
+First startup writes a random deployment administrator key to `$OC_DATA_DIR/deployment-admin.key`. Use it to sign in to the console and create a workspace. The issued workspace key connects an Agent. The embedded AnySeek catalog lives under `$OC_DATA_DIR/anyseek`.
 
 ## Cloud deployment
 

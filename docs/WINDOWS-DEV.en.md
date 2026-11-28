@@ -6,11 +6,10 @@ Use Windows Terminal or a native console and build Origence with MSVC. Node.js 2
 
 ## Start the API and embedded AnySeek
 
-Build Origence with `tools\build.ps1 -Action Build`. Run `workspace-create` only during first-time initialization and save the returned workspace token in a private credential provider.
+Build Origence with `tools\build.ps1 -Action Build`. First startup places `deployment-admin.key` in the data directory. Use it to sign in to the console and create a workspace.
 
 ```powershell
 $env:OC_DATA_DIR = 'C:\dev-data\origence'
-.\target\debug\origence.exe --offline workspace-create dev
 .\target\debug\origence.exe serve --local
 ```
 

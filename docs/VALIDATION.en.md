@@ -4,6 +4,15 @@
 
 The latest local verification was 2026-11-28. Each section identifies its exact source revision. The 2026-11-17 records are synchronized to main [`92258fc`](https://github.com/TheLudlows/Origence/commit/92258fc578bbdb1c21ca949ddbbcfb1729a5813a). The latest local results appear first. Historical results apply only to their listed revisions and do not describe current CI. See [STATUS](STATUS.en.md) for capabilities and follow-up work. This page records evidence and limits.
 
+## 2026-11-28 · CLI reduction and startup administrator registration
+
+Based on main `340aa50`. Linux, Rust 1.98.0, Node 24, with synthetic data in temporary directories.
+
+- `cargo fmt --all -- --check` passed. `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings` passed for the default build and for the standalone AnySeek host build with `--no-default-features --features local-storage`.
+- `cargo test --offline --locked --test local -j 3` passed 12, 6, and 5 tests filtered by `local_app::`, `client_hooks::`, and `workspace_access::`. They cover the binary command surface, the compatibility alias, preservation of the existing administrator, online workspace provisioning, and the actual hook.
+- `python3 tools/anyseek_smoke.py --embedded --binary <origence>`, `python3 tools/mcp_smoke.py --local --binary <origence>`, `python3 tools/private_archive_smoke.py --binary <origence>`, and `npm test --prefix ui` passed. The local installer and console accepted plain install, rejected `--init`, and preserved data across reinstall and uninstall.
+- Windows, Docker, live models, and native Claude Code / Codex sessions were outside this local verification.
+
 ## 2026-11-28 · PR #186 build and remote publication checks
 
 Based on `24d847b`. Linux with Rust 1.98.0 reproduced the unused-code error in the build

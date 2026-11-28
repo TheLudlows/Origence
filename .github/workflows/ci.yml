@@ -183,9 +183,6 @@ jobs:
       - name: Build tools, lint, and all local lifecycle tests
         shell: pwsh
         run: ./tools/build.ps1 -Action Validate -Jobs 1 -SkipFormatCheck
-      - name: Hook queue caller-managed Windows ACL (synthetic, no clients)
-        shell: pwsh
-        run: ./tools/test_hook_acl.ps1
       - name: Authority contracts without host features
         run: cargo check --locked --no-default-features --features sqlite --lib -j 1
 

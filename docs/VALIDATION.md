@@ -7,6 +7,15 @@
 最新本地检查见首节；后续历史结果只适用于各自注明的提交，不代表本次 CI 状态。
 当前能力和后续工作见 [STATUS](STATUS.md)，本文只登记证据与限制。
 
+## 2026-11-28 · 精简 CLI 与启动登记管理员
+
+基于 main `340aa50`。Linux、Rust 1.98.0、Node 24，全部使用合成数据和临时目录。
+
+- `cargo fmt --all -- --check` 通过。默认构建和独立 AnySeek 宿主构建均通过 `cargo clippy --offline --locked --all-targets -j 3 -- -D warnings`，后者加 `--no-default-features --features local-storage`。
+- `cargo test --offline --locked --test local -j 3` 分别按 `local_app::`、`client_hooks::` 和 `workspace_access::` 过滤，12、6、5 项通过。验证二进制命令面、兼容别名、存量管理员不被更换、在线创建工作空间和实际 Hook。
+- `python3 tools/anyseek_smoke.py --embedded --binary <origence>`、`python3 tools/mcp_smoke.py --local --binary <origence>`、`python3 tools/private_archive_smoke.py --binary <origence>` 及 `npm test --prefix ui` 通过。真实本地安装器和控制台验证普通安装、拒绝 `--init`、重装以及卸载保留数据。
+- 未在 Windows 或 Docker 上执行本改动的验证，也未启动真实模型或原生 Claude Code / Codex 联调。
+
 ## 2026-11-28 · PR #186 构建与远端发布回归
 
 基于 `24d847b`，在 Linux 和 Rust 1.98.0 下复现无特性构建的未使用代码错误。

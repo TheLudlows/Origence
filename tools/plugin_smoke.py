@@ -14,6 +14,7 @@ import time
 from urllib.error import URLError
 
 from live_archive_smoke import child_environment
+from native_fixture import workspace as seed_workspace
 from mcp_smoke import Child, Host, Mcp, fixture_directory, isolated_env, require, sanitized
 
 PLUGIN = "origence@origence-tools"
@@ -316,14 +317,6 @@ def check_hook_run(host, summary, component, forbidden, workspace):
                 "Plugin did not observe its own allowlisted MCP calls")
 
 
-def bootstrap(binary, data, env, name, home=None):
-    command = [binary, "--offline", "workspace-create", name]
-    if home is not None:
-        command.extend(["--in-tenant-of", home])
-    result = subprocess.run(command, cwd=data, env=env, capture_output=True, check=True, timeout=60)
-    return json.loads(result.stdout)
-
-
 def publish_probe(host, label):
     original = QUERY + f" {label} policy requires one approval."
     current = QUERY + f" {label} policy requires two approvals."
@@ -349,8 +342,8 @@ def main():
         binary = binary_dir / ("origence.exe" if os.name == "nt" else "origence")
         shutil.copy2(args.binary, binary)
         host_env = isolated_env(str(data))
-        home = bootstrap(binary, data, host_env, "Plugin default workspace")
-        alternate = bootstrap(binary, data, host_env, "Plugin selected workspace", home["workspace_id"])
+        home = seed_workspace(host_env, "Plugin default workspace")
+        alternate = seed_workspace(host_env, "Plugin selected workspace", home["workspace_id"])
         with Host(str(binary), host_env, home["token"], [home["token"], alternate["token"]],
                   serve_args=("--local",), bind=args.bind) as host:
             first_asset = publish_probe(host, "default workspace")

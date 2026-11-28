@@ -7,6 +7,7 @@ Runs the actual HTTP host with temporary data, scoped keys and no models.
 import argparse
 from contextlib import contextmanager
 from anyseek_fixture_env import configure_fixture
+from native_fixture import admin_env, workspace as seed_workspace
 import json
 import os
 from pathlib import Path
@@ -650,19 +651,11 @@ def main():
     with fixture_directory("oc-mcp-smoke-") as directory:
         env = isolated_env(str(directory))
         forbidden = [str(directory), OLD_CONTENT, CONTENT, BAD_INPUT]
-        bootstrap = subprocess.run([binary, "--offline", "workspace-create", "mcp-smoke"],
-                                   env=env, cwd=directory, capture_output=True, timeout=STARTUP_TIMEOUT)
-        require(bootstrap.returncode == 0, "MCP fixture workspace bootstrap failed")
-        workspace = json.loads(bootstrap.stdout)
+        workspace = seed_workspace(env, "mcp-smoke")
         token, workspace_id = workspace["token"], workspace["workspace_id"]
-        provision = subprocess.run([binary, "--offline", "deployment-admin-rotate"], env=env,
-                                   cwd=directory, capture_output=True, timeout=STARTUP_TIMEOUT)
-        require(provision.returncode == 0, "MCP fixture administrator bootstrap failed")
-        admin = json.loads(provision.stdout)["token"]
+        admin = admin_env(env)
         bad_token = "oc_invalid_smoke_" + uuid.uuid4().hex
         forbidden.extend([token, admin, bad_token])
-        sanitized(bootstrap.stderr.decode("utf-8", errors="replace"), forbidden)
-        sanitized(provision.stderr.decode("utf-8", errors="replace"), forbidden)
         env["OC_API_KEY"] = token
         turn = {"turn_id": str(uuid.uuid4()), "question": "What changed here?",
                 "answer": "This archive is private.", "used_evidence": []}

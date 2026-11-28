@@ -478,26 +478,13 @@ async fn single_workspace_key_owns_content_but_cannot_delete_turns_or_expand_acc
     service.engine.shutdown().await.unwrap();
 }
 
-async fn bootstrap(dir: &std::path::Path, name: &str, existing: Option<Uuid>) -> serde_json::Value {
-    let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_origence"));
-    command
-        .args(["--offline", "workspace-create", name])
-        .env("OC_DATA_DIR", dir);
-    if let Some(workspace) = existing {
-        command.args(["--in-tenant-of", &workspace.to_string()]);
-    }
-    let output = command.output().await.unwrap();
-    assert!(output.status.success(), "workspace bootstrap failed");
-    serde_json::from_slice(&output.stdout).unwrap()
-}
-
 #[tokio::test]
 async fn admin_key_inventory_is_scoped_paginated_and_reflects_credential_lifecycle() {
     let dir = tempfile::tempdir().unwrap();
-    let a = bootstrap(dir.path(), "A", None).await;
+    let a = crate::support::seed_workspace(dir.path(), "A", None).await;
     let a_id: Uuid = a["workspace_id"].as_str().unwrap().parse().unwrap();
-    let b = bootstrap(dir.path(), "B", Some(a_id)).await;
-    let other = bootstrap(dir.path(), "Other tenant", None).await;
+    let b = crate::support::seed_workspace(dir.path(), "B", Some(a_id)).await;
+    let other = crate::support::seed_workspace(dir.path(), "Other tenant", None).await;
     let service = open_service(dir.path(), Models::disabled()).await.unwrap();
     let a_token = a["token"].as_str().unwrap();
     let a_admin = service.auth(a_token).await.unwrap();
@@ -654,11 +641,12 @@ async fn admin_key_inventory_is_scoped_paginated_and_reflects_credential_lifecyc
 #[tokio::test]
 async fn one_credential_uses_live_workspace_grants_without_sharing_private_archives() {
     let dir = tempfile::tempdir().unwrap();
-    let admin_a = bootstrap(dir.path(), "Engineering", None).await;
+    let admin_a = crate::support::seed_workspace(dir.path(), "Engineering", None).await;
     let a: Scope = serde_json::from_value(admin_a.clone()).unwrap();
-    let admin_b = bootstrap(dir.path(), "Documents", Some(a.workspace_id)).await;
+    let admin_b =
+        crate::support::seed_workspace(dir.path(), "Documents", Some(a.workspace_id)).await;
     let b: Scope = serde_json::from_value(admin_b.clone()).unwrap();
-    let admin_external = bootstrap(dir.path(), "External", None).await;
+    let admin_external = crate::support::seed_workspace(dir.path(), "External", None).await;
     let foreign: Scope = serde_json::from_value(admin_external.clone()).unwrap();
     assert_eq!(a.tenant_id, b.tenant_id);
     assert_ne!(a.workspace_id, b.workspace_id);

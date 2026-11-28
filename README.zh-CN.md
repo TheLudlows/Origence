@@ -27,12 +27,10 @@ Origence 管理记忆、知识、Skill 和运行轨迹，提供 HTTP、MCP 接�
 ```sh
 cargo build --locked
 export OC_DATA_DIR="$(mktemp -d)"
-./target/debug/origence --offline workspace-create --workspace-key demo
-./target/debug/origence --offline deployment-admin-rotate
 ./target/debug/origence serve --local
 ```
 
-使用 `workspace-create` 返回的 Key 登录工作空间或接入 Agent。部署管理员可以创建平级工作空间、管理各空间的 Key 和审核全局知识。Origence 在 `$OC_DATA_DIR/anyseek` 下打开嵌入式 AnySeek Catalog，并在首次访问时初始化工作空间对应的集合。
+首次启动会在 `$OC_DATA_DIR/deployment-admin.key` 写入随机部署管理员 Key。用它登录控制台并创建工作空间，取得工作空间 Key 后即可接入 Agent。嵌入式 AnySeek Catalog 位于 `$OC_DATA_DIR/anyseek`。
 
 ## 云上部署
 

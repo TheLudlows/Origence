@@ -12,7 +12,6 @@ mod evidence_bundle;
 mod foundation_http;
 #[cfg(feature = "local-storage")]
 mod global_knowledge;
-mod identity_check_cli;
 mod identity_vector_regression;
 mod initialization;
 mod learning_loop;

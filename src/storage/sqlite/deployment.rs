@@ -43,6 +43,29 @@ pub(super) async fn require_admin(conn: &mut Connection, token: &str) -> Storage
 }
 
 impl SqliteStore {
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn has_deployment_admin(&self) -> StorageResult<bool> {
+        sqlite_db::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM oc_deployment_admin WHERE singleton=1)",
+        )
+        .fetch_one(&self.pool)
+        .await
+        .map_err(sqlite_err)
+    }
+
+    #[cfg(feature = "local-storage")]
+    pub(crate) async fn initialize_deployment_admin(&self, token: &str) -> StorageResult<()> {
+        sqlite_db::query(
+            "INSERT INTO oc_deployment_admin(singleton,token_hash) VALUES(1,?)
+             ON CONFLICT(singleton) DO NOTHING",
+        )
+        .bind(hash(token))
+        .execute(&self.pool)
+        .await
+        .map_err(sqlite_err)?;
+        self.authenticate_deployment_admin(token).await
+    }
+
     /// Offline operator provisioning. Replacement immediately revokes the previous token.
     pub async fn rotate_deployment_admin(&self) -> StorageResult<String> {
         let token = format!(

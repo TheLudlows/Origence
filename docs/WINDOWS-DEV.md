@@ -6,11 +6,10 @@
 
 ## 启动 API 与嵌入式 AnySeek
 
-先用 `tools\build.ps1 -Action Build` 构建 Origence。以下 `workspace-create` 只在首次初始化时执行一次，将返回的 workspace token 保存到私密凭据提供器。
+用 `tools\build.ps1 -Action Build` 构建 Origence。首次启动在数据目录保存 `deployment-admin.key`，用它登录控制台并创建工作空间。
 
 ```powershell
 $env:OC_DATA_DIR = 'C:\dev-data\origence'
-.\target\debug\origence.exe --offline workspace-create dev
 .\target\debug\origence.exe serve --local
 ```
 
