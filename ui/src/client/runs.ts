@@ -77,26 +77,26 @@ export function citation(
 }
 
 export async function overview(root: HTMLElement, ctx: ViewContext, workspaceId: string) {
+  const readiness = el("span", "stat-health", "读取中");
   root.append(
     heading(
       "运行总览",
       el(
         "span",
-        "",
-        "查看新建运行和调用记录。",
+        "overview-meta",
         el(
           "span",
           "overview-workspace-id",
           el("span", "", "工作区 ID"),
           el("code", "mono", workspaceId),
         ),
+        el("span", "overview-service", el("span", "", "服务就绪状态"), readiness),
       ),
       button("查看调用链 →", () => ctx.navigate("runs"), "primary"),
     ),
   );
-  const readiness = el("div", "overview-health");
   const recent = el("div");
-  root.append(readiness, runCreationTrend(ctx.signal), recent);
+  root.append(runCreationTrend(ctx.signal), recent);
   const results = await Promise.allSettled([
     api.get<{ status: string }>("/health/ready", ctx.signal),
     api.get<RunDirectory>("/v1/runs?limit=25", ctx.signal),
@@ -108,32 +108,16 @@ export async function overview(root: HTMLElement, ctx: ViewContext, workspaceId:
   const list = panel(workspaceWide ? "当前工作区的运行" : "当前 Key 的运行");
   recent.append(list);
   const ready = health.status === "fulfilled" && health.value.status === "ready";
-  readiness.append(
-    panel(
-      "服务就绪状态",
-      el(
-        "div",
-        ready ? "stat-health is-ready" : "stat-health",
-        ready ? "就绪" : health.status === "fulfilled" ? health.value.status : "不可用",
-      ),
-      el("p", "muted", "检查 Worker 与本地存储。模型健康需单独核对。"),
-    ),
-  );
+  readiness.classList.toggle("is-ready", ready);
+  readiness.textContent = ready ? "就绪" : health.status === "fulfilled" ? health.value.status : "不可用";
   if (runs.status === "fulfilled") {
     list.append(runTable(runs.value.items, workspaceWide, ctx));
     if (runs.value.next_after)
       list.append(el("p", "muted", "还有更多运行，请进入调用链路分页查看。"));
   } else message(list, runs.reason);
-  root.append(
-    panel(
-      "可观测范围",
-      el(
-        "p",
-        "muted",
-        "Origence 展示服务端准备回执和客户端显式上报。没有上报的活动保持未知。",
-      ),
-    ),
-  );
+  root.append(el("p", "muted overview-note",
+    "服务就绪状态检查 Worker 与本地存储，模型健康需单独核对。未上报的运行活动保持未知。",
+  ));
 }
 
 function runTable(items: Run[], workspaceWide: boolean, ctx: ViewContext) {

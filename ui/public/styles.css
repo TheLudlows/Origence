@@ -1,23 +1,26 @@
 :root {
   color-scheme: light dark;
-  --bg: light-dark(#f3f5ef, #141a16);
-  --panel: light-dark(#fff, #1c241e);
-  --text: light-dark(#19251d, #eef3eb);
-  --muted: light-dark(#526156, #b1bdaf);
-  --line: light-dark(#dce4da, #364238);
-  --control-line: light-dark(#849283, #859386);
-  --soft: light-dark(#eff3ee, #253027);
-  --accent: light-dark(#2a6042, #c2e2a9);
-  --accent-soft: light-dark(#e7f0e3, #293e2c);
-  --action: light-dark(#24563b, #c5e7a3);
-  --action-hover: light-dark(#17442c, #d9efbd);
-  --action-text: light-dark(#fff, #17241a);
-  --positive: light-dark(#226348, #a7dfbd);
-  --positive-soft: light-dark(#e8f4eb, #263e30);
-  --error: light-dark(#9a2943, #ffacb9);
-  --shadow: 0 1px 2px light-dark(#183a2208, #0003);
-  --content-width: 1500px;
-  --page-gutter: clamp(22px, 3.4vw, 52px);
+  --bg: light-dark(#fff, #1d1e22);
+  --panel: light-dark(#fff, #24252a);
+  --sidebar: light-dark(#f7f8fa, #202125);
+  --text: light-dark(#212329, #f2f2f5);
+  --muted: light-dark(#585d68, #b8bcc7);
+  --line: light-dark(#e0e2e7, #393b44);
+  --control-line: light-dark(#8a8e9a, #878b98);
+  --soft: light-dark(#f2f3f6, #2d2f37);
+  --accent: light-dark(#824509, #ffd08a);
+  --accent-soft: light-dark(#fff2df, #402f20);
+  --chart-mark: light-dark(#ae5a0b, #e8aa62);
+  --action: light-dark(#24262e, #eeeef2);
+  --action-hover: light-dark(#3c404c, #d8dbe5);
+  --action-text: light-dark(#fff, #212329);
+  --positive: light-dark(#2c6348, #aae0be);
+  --positive-soft: light-dark(#eaf4ee, #283d32);
+  --error: light-dark(#922d40, #ffacb9);
+  --mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --radius: 8px;
+  --content-width: 1240px;
+  --page-gutter: clamp(22px, 3.1vw, 46px);
   font:
     14px/1.55 Inter, system-ui, -apple-system, "Segoe UI",
     "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
@@ -44,10 +47,10 @@ pre {
   margin: 0;
 }
 h1 {
-  font-size: clamp(27px, 3vw, 43px);
-  font-weight: 730;
-  line-height: 1.17;
-  letter-spacing: -0.037em;
+  font-size: clamp(26px, 2.6vw, 36px);
+  font-weight: 680;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
   overflow-wrap: anywhere;
 }
 h2 {
@@ -66,7 +69,7 @@ textarea {
 }
 button {
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius);
   padding: 8px 14px;
   background: var(--panel);
   cursor: pointer;
@@ -124,7 +127,7 @@ textarea {
   width: 100%;
   background: var(--panel);
   border: 1px solid var(--control-line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 9px 11px;
   min-height: 38px;
 }
@@ -145,28 +148,23 @@ small {
   font-size: 12px;
 }
 .mono {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--mono);
   font-size: 11px;
   overflow-wrap: anywhere;
 }
 .shell {
   display: grid;
-  grid-template-columns: 226px minmax(0, 1fr);
+  grid-template-columns: 216px minmax(0, 1fr);
   min-height: 100vh;
 }
 .sidebar {
-  color-scheme: dark;
-  --panel: #202e24;
-  --line: #3a4a3d;
-  --soft: #29382d;
-  --accent-soft: #304435;
   position: sticky;
   top: 0;
   height: 100dvh;
   overflow-y: auto;
-  background: #18231c;
+  background: var(--sidebar);
   border-inline-end: 1px solid var(--line);
-  padding: 23px 14px 16px;
+  padding: 21px 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -176,8 +174,9 @@ small {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 25px;
-  font-weight: 740;
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 650;
   line-height: 1.15;
   letter-spacing: -0.045em;
 }
@@ -185,11 +184,11 @@ small {
   position: relative;
   display: grid;
   place-items: center;
-  flex: 0 0 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: #d0eba8;
-  color: #243624;
+  flex: 0 0 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 .brand-mark::before,
 .brand-mark::after {
@@ -209,10 +208,8 @@ small {
   border-radius: 2px;
 }
 .workspace {
-  background: var(--panel);
-  padding: 9px 8px 8px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
 .workspace h2 {
   padding-inline: 5px;
@@ -242,8 +239,8 @@ small {
   overflow-wrap: anywhere;
 }
 .workspace-item[aria-current="true"] {
-  color: var(--accent);
-  background: var(--accent-soft);
+  color: var(--text);
+  background: var(--soft);
   font-weight: 660;
 }
 .workspace-item[aria-current="true"]::before {
@@ -252,7 +249,7 @@ small {
   height: 6px;
   flex: 0 0 6px;
   border-radius: 2px;
-  background: currentColor;
+  background: var(--chart-mark);
 }
 .workspace-item:focus-visible {
   outline-offset: -2px;
@@ -277,16 +274,16 @@ small {
   background: transparent;
   color: var(--muted);
   border: 1px solid transparent;
-  gap: 10px;
-  padding: 9px 11px;
+  padding: 7px 10px;
   width: 100%;
   scroll-margin-block: 6px;
   white-space: nowrap;
 }
 .nav-item[aria-current="page"] {
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 680;
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--text);
+  font-weight: 650;
 }
 .nav-item[aria-current="page"]::before {
   content: "";
@@ -295,117 +292,13 @@ small {
   width: 3px;
   height: 14px;
   border-radius: 3px;
-  background: currentColor;
-}
-.nav-icon {
-  position: relative;
-  display: block;
-  flex: 0 0 16px;
-  height: 16px;
-}
-.nav-icon::before,
-.nav-icon::after {
-  position: absolute;
-  content: "";
-  box-sizing: border-box;
-}
-.nav-icon-overview::before {
-  inset: 1px;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-  background:
-    linear-gradient(currentColor, currentColor) 23% 70% / 2px 4px no-repeat,
-    linear-gradient(currentColor, currentColor) 50% 70% / 2px 7px no-repeat,
-    linear-gradient(currentColor, currentColor) 77% 70% / 2px 5px no-repeat;
-}
-.nav-icon-runs::before {
-  inset: 2px;
-  border-left: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  border-radius: 0 0 0 5px;
-}
-.nav-icon-runs::after {
-  width: 4px;
-  height: 4px;
-  top: 1px;
-  left: 0;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 11px 10px currentColor, 7px 2px currentColor;
-}
-.nav-icon-memory::before {
-  inset: 3px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-  transform: rotate(45deg);
-}
-.nav-icon-memory::after {
-  inset: 6px;
-  border-radius: 1px;
-  background: currentColor;
-  transform: rotate(45deg);
-}
-.nav-icon-knowledge::before {
-  inset: 1px 2px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-  background:
-    linear-gradient(currentColor, currentColor) center 36% / 53% 1px no-repeat,
-    linear-gradient(currentColor, currentColor) center 63% / 53% 1px no-repeat;
-}
-.nav-icon-contexts::before {
-  inset: 1px;
-  border: 1.5px solid currentColor;
-  border-radius: 3px;
-  background:
-    linear-gradient(currentColor, currentColor) center / 1px 100% no-repeat,
-    linear-gradient(currentColor, currentColor) center / 100% 1px no-repeat;
-}
-.nav-icon-archive::before {
-  position: absolute;
-  inset: 3px 2px;
-  border: 1.5px solid currentColor;
-  border-radius: 2px;
-  content: "";
-}
-.nav-icon-archive::after {
-  position: absolute;
-  inset: 7px 6px auto;
-  border-top: 1.5px solid currentColor;
-  content: "";
+  background: var(--chart-mark);
 }
 .archive-answer {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.nav-icon-keys::before {
-  width: 8px;
-  height: 8px;
-  top: 1px;
-  right: 1px;
-  border: 1.5px solid currentColor;
-  border-radius: 50%;
-}
-.nav-icon-keys::after {
-  width: 8px;
-  height: 4px;
-  top: 9px;
-  left: 1px;
-  border-bottom: 1.5px solid currentColor;
-  border-left: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-}
-.nav-icon-agents::before {
-  inset: 1px;
-  border: 1.5px solid currentColor;
-  border-radius: 50%;
-}
-.nav-icon-agents::after {
-  inset: 5px;
-  border: 1.5px solid currentColor;
-  border-radius: 50%;
-}
 .account {
   display: flex;
   gap: 8px;
@@ -428,16 +321,6 @@ small {
   display: block;
   color: var(--muted);
 }
-.avatar {
-  border-radius: 9px;
-  background: var(--accent-soft);
-  color: var(--accent);
-  flex: 0 0 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-}
 .sidebar-exit {
   margin-left: auto;
   background: transparent;
@@ -451,9 +334,8 @@ small {
   min-width: 0;
 }
 .topbar {
-  min-height: 61px;
+  min-height: 56px;
   border-bottom: 1px solid var(--line);
-  background: var(--panel);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -497,7 +379,7 @@ small {
   background: linear-gradient(90deg, currentColor 50%, transparent 50%);
 }
 .content {
-  padding: clamp(26px, 3.1vw, 46px) var(--page-gutter);
+  padding: clamp(26px, 2.8vw, 40px) var(--page-gutter);
   max-width: var(--content-width);
   margin: 0 auto;
   display: grid;
@@ -518,18 +400,30 @@ small {
   margin-top: 9px;
   font-size: 14px;
 }
-.overview-workspace-id {
+.overview-meta,
+.overview-workspace-id,
+.overview-service {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
-  gap: 2px 8px;
-  margin-top: 6px;
+  align-items: center;
+  gap: 3px 8px;
   font-size: 12px;
+}
+.overview-meta {
+  gap: 6px 20px;
+  margin-top: 12px;
 }
 .overview-workspace-id code {
   color: var(--text);
+  background: var(--soft);
+  border-radius: 4px;
+  padding: 2px 6px;
   overflow-wrap: anywhere;
   user-select: all;
+}
+.overview-note {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
 }
 .actions {
   display: flex;
@@ -539,9 +433,8 @@ small {
 }
 .panel {
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--radius);
   background: var(--panel);
-  box-shadow: var(--shadow);
   padding: clamp(17px, 2vw, 24px);
   min-width: 0;
   display: grid;
@@ -554,29 +447,16 @@ small {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
 }
-.overview-health .panel {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 3px 14px;
-  padding-block: 13px;
-  align-items: center;
-}
-.overview-health h2 {
-  font-size: 14px;
-}
 .stat-health {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 680;
+  gap: 5px;
+  font-weight: 620;
   line-height: 1.3;
   overflow-wrap: anywhere;
   max-width: 9em;
-  min-height: 30px;
   border-radius: 999px;
-  padding: 5px 10px;
+  padding: 3px 8px;
   background: var(--soft);
 }
 .stat-health.is-ready {
@@ -585,8 +465,8 @@ small {
 }
 .stat-health.is-ready::before {
   content: "";
-  flex: 0 0 7px;
-  height: 7px;
+  flex: 0 0 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
 }
@@ -638,7 +518,7 @@ form > button {
   }
 }
 .run-trend {
-  gap: 16px;
+  gap: 13px;
 }
 .run-trend-heading {
   display: flex;
@@ -663,10 +543,7 @@ form > button {
 }
 .run-chart {
   margin: 0;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--panel);
+  padding-top: 10px;
   font-variant-numeric: tabular-nums;
 }
 .run-chart-label {
@@ -676,7 +553,7 @@ form > button {
 .run-chart-grid {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: 156px auto;
+  grid-template-rows: 128px auto;
   gap: 10px 8px;
 }
 .run-chart-scale {
@@ -754,8 +631,8 @@ form > button {
 .run-chart-mark {
   width: min(64%, 32px);
   min-height: 1px;
-  border-radius: 4px 4px 0 0;
-  background: linear-gradient(180deg, light-dark(#4a8660, #c3e6a9), light-dark(#2b5f43, #80b18b));
+  border-radius: 2px 2px 0 0;
+  background: var(--chart-mark);
   pointer-events: none;
 }
 .run-chart-mark.is-zero {
@@ -831,11 +708,7 @@ tbody tr:hover {
   background: color-mix(in srgb, var(--error) 8%, var(--panel));
 }
 .code {
-  font:
-    12px/1.8 ui-monospace,
-    SFMono-Regular,
-    Consolas,
-    monospace;
+  font: 12px/1.8 var(--mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   background: var(--soft);
@@ -941,16 +814,14 @@ dialog {
   background: var(--panel);
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 16px 60px #14231948;
+  border-radius: var(--radius);
   width: min(600px, calc(100% - 28px));
   padding: 24px;
   max-height: 90vh;
   overflow: auto;
 }
 dialog::backdrop {
-  background: #10252b80;
-  backdrop-filter: blur(2px);
+  background: #24282066;
 }
 .dialog-head {
   display: flex;
@@ -969,35 +840,35 @@ dialog::backdrop {
   place-items: center;
   min-height: 100svh;
   padding: 36px 24px;
-  background: var(--panel);
+  background: var(--sidebar);
+}
+.login-layout {
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+  width: min(100%, 400px);
 }
 .login-form {
   display: grid;
-  gap: 25px;
-  width: min(100%, 360px);
+  gap: 20px;
+  width: 100%;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: clamp(19px, 5vw, 32px);
 }
-.login-heading {
-  display: grid;
-  gap: 24px;
-}
-.login-heading .brand {
-  font-size: 20px;
-}
-.login-heading .brand-mark {
-  flex-basis: 30px;
-  height: 30px;
-  background: var(--text);
-  color: var(--panel);
-}
-.login-heading h1 {
-  font-size: 32px;
+.login-title {
+  font-size: 27px;
 }
 .login-form form {
-  gap: 17px;
+  gap: 15px;
 }
-.login-alternate {
-  border-top: 1px solid var(--line);
-  padding-top: 24px;
+.login-switch {
+  justify-self: center;
+  font-size: 12px;
+  min-height: 28px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .login-form .field {
   color: var(--text);
@@ -1006,18 +877,14 @@ dialog::backdrop {
   gap: 8px;
 }
 .login-form input {
-  min-height: 49px;
-  border-radius: 10px;
+  min-height: 46px;
   padding-inline: 13px;
   font-weight: 450;
 }
 .login-form form > button {
-  --action: var(--text);
-  --action-hover: color-mix(in srgb, var(--text) 84%, var(--panel));
-  --action-text: var(--panel);
   justify-self: stretch;
   margin-top: 4px;
-  min-height: 49px;
+  min-height: 46px;
   font-size: 14px;
   font-weight: 690;
 }
@@ -1105,7 +972,6 @@ ins {
     width: auto;
     padding: 6px 8px;
     font-size: 12px;
-    gap: 6px;
   }
   .content {
     padding-block: 22px;
@@ -1121,9 +987,6 @@ ins {
   }
   .panel {
     padding: 15px;
-  }
-  .run-chart {
-    padding: 10px;
   }
   .form-grid {
     grid-template-columns: minmax(0, 1fr);

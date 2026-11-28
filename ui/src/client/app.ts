@@ -186,69 +186,49 @@ function createWorkspace(parent: ConsoleWorkspace, binding: string, parentSignal
 }
 
 function login(setupRequired?: true) {
-  const workspaceKey = input("输入工作空间或部署管理员 Key", "", "password");
-  workspaceKey.required = true;
-  workspaceKey.autocomplete = "off";
-  const keyError = el("div");
-  const keyConnect = submit("使用 Key 登录");
-  const keyForm = form(async () => {
-    keyConnect.disabled = true;
-    keyError.replaceChildren();
-    try {
-      const key = workspaceKey.value.trim();
-      const result = await api.post<ConsoleSessionResponse>(sessionPath, key.startsWith("oc_admin_") ? { deployment_key: key } : { workspace_key: key });
-      workspaceKey.value = "";
-      showSession(result);
-    } catch (e) {
-      message(keyError, e);
-    } finally {
-      keyConnect.disabled = false;
-    }
-  }, field("访问 Key", workspaceKey), keyConnect, keyError);
-  if (!setupRequired) keyForm.classList.add("login-alternate");
-
   const username = input("");
   username.required = true;
   username.autocomplete = "username";
-  const secret = input("", "", "password");
-  secret.required = true;
-  secret.autocomplete = "current-password";
-  const error = el("div");
-  const connect = submit("登录");
-  mount.replaceChildren(
-    el(
-      "main",
-      "login",
-      el(
-        "section",
-        "login-form",
-        el("header", "login-heading", brand(), el("h1", "", "登录控制台")),
-        setupRequired ? null : form(
-          async () => {
-            connect.disabled = true;
-            error.replaceChildren();
-            try {
-              const result = await api.post<ConsoleSessionResponse>(sessionPath, {
-                username: username.value.trim(),
-                password: secret.value,
-              });
-              secret.value = "";
-              showSession(result);
-            } catch (e) {
-              message(error, e);
-            } finally {
-              connect.disabled = false;
-            }
-          },
-          field("账号", username),
-          field("密码", secret),
-          connect,
-          error,
-        ),
-        keyForm,
-      ),
-    ),
-  );
+  const heading = el("h1", "login-title", "登录控制台");
+  const card = el("section", "login-form");
+  mount.replaceChildren(el("main", "login", el("div", "login-layout", brand(), card)));
+
+  function showForm(useKey: boolean, focus = false) {
+    const secret = input(useKey ? "输入工作空间或部署管理员 Key" : "", "", "password");
+    secret.required = true;
+    secret.autocomplete = useKey ? "off" : "current-password";
+    const error = el("div");
+    const connect = submit(useKey ? "使用 Key 登录" : "登录");
+    const switchMode = !setupRequired && button(useKey ? "用账号密码登录" : "用 Key 登录", () => {
+      secret.value = "";
+      showForm(!useKey, true);
+    }, "link login-switch");
+    const credentials = form(async () => {
+      if (connect.disabled) return;
+      connect.disabled = true;
+      if (switchMode) switchMode.disabled = true;
+      error.replaceChildren();
+      try {
+        const key = useKey ? secret.value.trim() : "";
+        const payload = useKey
+          ? key.startsWith("oc_admin_") ? { deployment_key: key } : { workspace_key: key }
+          : { username: username.value.trim(), password: secret.value };
+        const result = await api.post<ConsoleSessionResponse>(sessionPath, payload);
+        secret.value = "";
+        showSession(result);
+      } catch (e) {
+        message(error, e);
+      } finally {
+        connect.disabled = false;
+        if (switchMode) switchMode.disabled = false;
+      }
+    }, !useKey && field("账号", username), field(useKey ? "访问 Key" : "密码", secret), connect, error);
+    card.replaceChildren(heading, credentials);
+    if (switchMode) card.append(switchMode);
+    if (focus) (useKey ? secret : username).focus();
+  }
+
+  showForm(!!setupRequired);
 }
 
 async function render() {
@@ -292,10 +272,7 @@ async function render() {
     if (key === "archive" && user.role === "reader") continue;
     if (key === "keys" && user.role !== "admin") continue;
     if (key === "agents" && !canInspectAgents(user.role)) continue;
-    const link = button("", () => navigate(key), "nav-item");
-    const icon = el("span", `nav-icon nav-icon-${key}`);
-    icon.setAttribute("aria-hidden", "true");
-    link.append(icon, label);
+    const link = button(label, () => navigate(key), "nav-item");
     if (key === page) link.setAttribute("aria-current", "page");
     nav.append(link);
   }
@@ -328,8 +305,6 @@ async function render() {
   const ctx: ViewContext = { signal: route.signal, role: user.role, navigate };
   const activeWorkspace = user;
   const binding = session.binding;
-  const avatar = el("span", "avatar", session.account.slice(0, 1).toUpperCase());
-  avatar.setAttribute("aria-hidden", "true");
   mount.replaceChildren(
     el(
       "div",
@@ -351,7 +326,6 @@ async function render() {
         el(
           "div",
           "account",
-          avatar,
           el(
             "div",
             "account-identity",
