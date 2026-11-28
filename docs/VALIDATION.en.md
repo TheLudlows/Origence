@@ -21,6 +21,25 @@ Based on main `340aa50`. Linux, Rust 1.98.0, Node 24, with synthetic data in tem
 - `cargo test --offline --locked --test local -j 3` passed 12, 6, and 5 tests filtered by `local_app::`, `client_hooks::`, and `workspace_access::`. They cover the binary command surface, the compatibility alias, preservation of the existing administrator, online workspace provisioning, and the actual hook.
 - `python3 tools/anyseek_smoke.py --embedded --binary <origence>`, `python3 tools/mcp_smoke.py --local --binary <origence>`, `python3 tools/private_archive_smoke.py --binary <origence>`, and `npm test --prefix ui` passed. The local installer and console accepted plain install, rejected `--init`, and preserved data across reinstall and uninstall.
 - Windows, Docker, live models, and native Claude Code / Codex sessions were outside this local verification.
+## 2026-11-28 · Global knowledge retrieval review
+
+Based on `14278f4`, using Linux and Rust 1.98.0. The HTTP protocol fixture verified
+merged ranking across batches containing 257 approved chunks. Withdrawal during a
+global body read left only the still-visible workspace hit in the final result. Existing
+lost-response, pinned version, source deletion, and withdrawn Run replay checks also passed.
+
+## 2026-11-28 · Move global knowledge content to AnySeek
+
+Based on main `340aa50`, using Linux and Rust 1.98.0. Passed 232 library and 225 local
+integration tests. The targeted global knowledge rerun covered a lost write response,
+pending release isolation, cross-tenant reads, a pinned version, deletion of the private
+original, tampered text rejection, and Run replay denial after withdrawal.
+Strict all-target Clippy with all features and with only `sqlite`, Rust formatting,
+and `git diff --check` passed.
+
+`tools/anyseek_smoke.py --anyseek-binary <anyseek_server> --run python tools/mcp_smoke.py --binary <origence>`
+verified HTTP/MCP global reads and restart with standalone AnySeek `6a46fc7`.
+Native Windows and GitHub CI were not run.
 
 ## 2026-11-28 · PR #186 build and remote publication checks
 

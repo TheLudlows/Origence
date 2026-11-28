@@ -24,6 +24,21 @@
 - `cargo test --offline --locked --test local -j 3` 分别按 `local_app::`、`client_hooks::` 和 `workspace_access::` 过滤，12、6、5 项通过。验证二进制命令面、兼容别名、存量管理员不被更换、在线创建工作空间和实际 Hook。
 - `python3 tools/anyseek_smoke.py --embedded --binary <origence>`、`python3 tools/mcp_smoke.py --local --binary <origence>`、`python3 tools/private_archive_smoke.py --binary <origence>` 及 `npm test --prefix ui` 通过。真实本地安装器和控制台验证普通安装、拒绝 `--init`、重装以及卸载保留数据。
 - 未在 Windows 或 Docker 上执行本改动的验证，也未启动真实模型或原生 Claude Code / Codex 联调。
+## 2026-11-28 · 全局知识检索审查
+
+基于 `14278f4`，Linux 和 Rust 1.98.0。真实 HTTP 协议夹具通过 257 个已批准分块的跨批次检索和
+合并排名，另在全局正文读取期间下架，确认最终响应只保留仍可见的工作区结果。原回执丢失、
+固定版本、来源删除和下架后 Run 重放拒绝等断言同时通过。
+
+## 2026-11-28 · 全局知识正文迁入 AnySeek
+
+基于 main `340aa50`，Linux 和 Rust 1.98.0。库测试 232 项、本地集成测试 225 项通过。
+全局知识回归复跑覆盖写入回执丢失后的续跑、待审隔离、跨租户读取、固定版本、私有来源删除、
+篡改正文拒绝返回，以及下架后拒绝 Run 回放。全功能和仅 `sqlite` 的全目标严格 Clippy、
+Rust 格式检查、`git diff --check` 通过。
+
+使用独立 AnySeek `6a46fc7` 运行 `tools/anyseek_smoke.py --anyseek-binary <anyseek_server> --run python tools/mcp_smoke.py --binary <origence>`，
+验证 HTTP/MCP 全局读取与重启。未运行原生 Windows 或 GitHub CI。
 
 ## 2026-11-28 · PR #186 构建与远端发布回归
 

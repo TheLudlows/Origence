@@ -1,24 +1,61 @@
-//! Immutable global release snapshots and their approved keyword projection.
+//! Authority records for immutable global knowledge releases.
 use super::*;
-use crate::{
-    service::{GlobalKnowledgeDecision, global_knowledge::GlobalKnowledgeChunk},
-    types::SearchHit,
-};
+#[cfg(feature = "local-storage")]
+use crate::service::GlobalKnowledgeDecision;
 
-struct Release {
-    id: Uuid,
+#[derive(serde::Deserialize, serde::Serialize)]
+pub(crate) struct GlobalChunkRef {
+    pub(crate) id: Uuid,
+    pub(crate) start: i64,
+    pub(crate) end: i64,
+    pub(crate) hash: String,
+}
+
+fn decode_chunks(manifest: &str) -> StorageResult<Vec<GlobalChunkRef>> {
+    let chunks: Vec<GlobalChunkRef> = serde_json::from_str(manifest).map_err(|_| invalid_copy())?;
+    let mut end = 0;
+    let mut ids = std::collections::HashSet::new();
+    for chunk in &chunks {
+        if chunk.start != end
+            || chunk.end <= end
+            || !ids.insert(chunk.id)
+            || !crate::retrieval_diagnostics::digest(&chunk.hash)
+        {
+            return Err(invalid_copy());
+        }
+        end = chunk.end;
+    }
+    if chunks.is_empty() {
+        return Err(invalid_copy());
+    }
+    Ok(chunks)
+}
+
+#[cfg(feature = "local-storage")]
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) struct GlobalRelease {
+    pub(crate) id: Uuid,
     scope: Scope,
     asset: Uuid,
-    version: i32,
+    pub(crate) version: i32,
     source: Uuid,
-    title: String,
-    content_hash: String,
-    state: String,
+    pub(crate) title: String,
+    pub(crate) content_hash: String,
+    pub(crate) state: String,
+    chunk_manifest: String,
     submitted_at: i64,
     reviewed_at: Option<i64>,
 }
 
-impl sqlite_db::FromRow for Release {
+#[cfg(feature = "local-storage")]
+impl GlobalRelease {
+    pub(crate) fn chunks(&self) -> StorageResult<Vec<GlobalChunkRef>> {
+        decode_chunks(&self.chunk_manifest)
+    }
+}
+
+#[cfg(feature = "local-storage")]
+impl sqlite_db::FromRow for GlobalRelease {
     fn from_row(row: &sqlite_db::Row) -> sqlite_db::Result<Self> {
         Ok(Self {
             id: row.try_get("id")?,
@@ -32,14 +69,17 @@ impl sqlite_db::FromRow for Release {
             title: row.try_get("title")?,
             content_hash: row.try_get("content_hash")?,
             state: row.try_get("state")?,
+            chunk_manifest: row.try_get("chunk_manifest")?,
             submitted_at: row.try_get("submitted_at")?,
             reviewed_at: row.try_get("reviewed_at")?,
         })
     }
 }
-const RELEASE_FIELDS: &str = "id,tenant_id,workspace_id,asset_id,version,source_event_id,title,content_hash,state,submitted_at,reviewed_at";
+#[cfg(feature = "local-storage")]
+const RELEASE_FIELDS: &str = "id,tenant_id,workspace_id,asset_id,version,source_event_id,title,content_hash,state,chunk_manifest,submitted_at,reviewed_at";
 
-fn release_value(row: &Release, private: bool) -> Value {
+#[cfg(feature = "local-storage")]
+pub(crate) fn release_value(row: &GlobalRelease, private: bool) -> Value {
     let mut value = json!({
         "publication_id":row.id,"scope":"global","title":row.title,"version":row.version,
         "content_hash":row.content_hash,"state":row.state,"reviewed_at_ms":row.reviewed_at
@@ -53,6 +93,7 @@ fn release_value(row: &Release, private: bool) -> Value {
     value
 }
 
+#[cfg(feature = "local-storage")]
 impl SqliteStore {
     pub(crate) async fn global_moderation(
         &self,
@@ -79,6 +120,7 @@ impl SqliteStore {
     }
 }
 
+#[cfg(feature = "local-storage")]
 impl SqliteTx {
     pub(crate) async fn global_knowledge_source(
         &mut self,
@@ -103,7 +145,7 @@ impl SqliteTx {
         let sql = format!(
             "SELECT {RELEASE_FIELDS} FROM oc_global_knowledge WHERE tenant_id=? AND workspace_id=? AND asset_id=? AND version=?"
         );
-        let row: Option<Release> = sqlite_db::query_as(&sql)
+        let row: Option<GlobalRelease> = sqlite_db::query_as(&sql)
             .bind(self.scope.tenant_id)
             .bind(self.scope.workspace_id)
             .bind(asset)
@@ -119,7 +161,8 @@ impl SqliteTx {
         asset: Uuid,
         version: i32,
         view: &Value,
-        chunks: &[GlobalKnowledgeChunk],
+        id: Uuid,
+        chunks: &[GlobalChunkRef],
     ) -> StorageResult<Value> {
         if let Some(existing) = self.global_submission(asset, version).await? {
             return Ok(existing);
@@ -131,21 +174,16 @@ impl SqliteTx {
             serde_json::from_value(view["source_event_id"].clone()).map_err(|_| invalid_copy())?;
         let title = view["title"].as_str().ok_or_else(invalid_copy)?;
         let hash = view["content_hash"].as_str().ok_or_else(invalid_copy)?;
-        let id = Uuid::new_v4();
-        sqlite_db::query("INSERT INTO oc_global_knowledge(id,tenant_id,workspace_id,asset_id,version,source_event_id,title,content_hash,state,submitted_at)
-            VALUES(?,?,?,?,?,?,?,?,'pending',?)")
+        let manifest = serde_json::to_string(chunks).map_err(|_| invalid_copy())?;
+        sqlite_db::query("INSERT INTO oc_global_knowledge(id,tenant_id,workspace_id,asset_id,version,source_event_id,title,content_hash,chunk_manifest,state,submitted_at)
+            VALUES(?,?,?,?,?,?,?,?,?,'pending',?)")
             .bind(id).bind(self.scope.tenant_id).bind(self.scope.workspace_id)
-            .bind(asset).bind(version).bind(source).bind(title).bind(hash).bind(now_ms())
+            .bind(asset).bind(version).bind(source).bind(title).bind(hash).bind(manifest).bind(now_ms())
             .execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        for chunk in chunks {
-            sqlite_db::query("INSERT INTO oc_global_knowledge_chunks(publication_id,id,byte_start,byte_end,content,terms) VALUES(?,?,?,?,?,?)")
-                .bind(id).bind(Uuid::new_v4()).bind(chunk.start).bind(chunk.end).bind(&chunk.content).bind(&chunk.terms)
-                .execute(&mut *self.tx).await.map_err(sqlite_err)?;
-        }
         Ok(release_value(&self.global_header(id).await?, true))
     }
 
-    async fn global_header(&mut self, id: Uuid) -> StorageResult<Release> {
+    pub(crate) async fn global_header(&mut self, id: Uuid) -> StorageResult<GlobalRelease> {
         let sql = format!("SELECT {RELEASE_FIELDS} FROM oc_global_knowledge WHERE id=?");
         sqlite_db::query_as(&sql)
             .bind(id)
@@ -169,7 +207,7 @@ impl SqliteTx {
         let sql = format!(
             "SELECT {RELEASE_FIELDS} FROM oc_global_knowledge WHERE state=? AND id>? ORDER BY id LIMIT ?"
         );
-        let rows: Vec<Release> = sqlite_db::query_as(&sql)
+        let rows: Vec<GlobalRelease> = sqlite_db::query_as(&sql)
             .bind(moderation_state.unwrap_or("approved"))
             .bind(after)
             .bind((limit + 1) as i64)
@@ -185,35 +223,33 @@ impl SqliteTx {
         Ok(json!({"items":items,"next_after":next}))
     }
 
-    pub(crate) async fn global_snapshot(
+    pub(crate) async fn global_snapshot_header(
         &mut self,
         id: Uuid,
         private: bool,
-    ) -> StorageResult<Value> {
+    ) -> StorageResult<GlobalRelease> {
         let row = self.global_header(id).await?;
         if !private && row.state != "approved" {
             return Err(StorageError::NotFound);
         }
-        let content = self.global_snapshot_content(&row).await?;
-        let mut value = release_value(&row, private);
-        value["content"] = json!(content);
-        Ok(value)
+        Ok(row)
     }
 
-    async fn global_snapshot_content(&mut self, row: &Release) -> StorageResult<String> {
-        let chunks: Vec<String> = sqlite_db::query_scalar("SELECT content FROM oc_global_knowledge_chunks WHERE publication_id=? ORDER BY byte_start")
-            .bind(row.id).fetch_all(&mut *self.tx).await.map_err(sqlite_err)?;
-        let content = chunks.concat();
-        if hash(&content) != row.content_hash {
-            return Err(invalid_copy());
-        }
-        Ok(content)
+    pub(crate) async fn approved_global_knowledge(&mut self) -> StorageResult<Vec<GlobalRelease>> {
+        let sql = format!(
+            "SELECT {RELEASE_FIELDS} FROM oc_global_knowledge WHERE state='approved' ORDER BY id"
+        );
+        sqlite_db::query_as(&sql)
+            .fetch_all(&mut *self.tx)
+            .await
+            .map_err(sqlite_err)
     }
 
     pub(crate) async fn moderate_global_snapshot(
         &mut self,
         id: Uuid,
         decision: GlobalKnowledgeDecision,
+        checked_content: Option<&GlobalRelease>,
     ) -> StorageResult<Value> {
         let row = self.global_header(id).await?;
         let (from, to) = decision.transition();
@@ -226,6 +262,9 @@ impl SqliteTx {
             ));
         }
         if to == "approved" {
+            if checked_content != Some(&row) {
+                return Err(StorageError::Conflict("global release changed".into()));
+            }
             self.scope = row.scope;
             let v = self.global_knowledge_source(row.asset, row.version).await?;
             if v["source_event_id"] != json!(row.source) || v["content_hash"] != row.content_hash {
@@ -233,7 +272,6 @@ impl SqliteTx {
                     "submitted knowledge source changed".into(),
                 ));
             }
-            self.global_snapshot_content(&row).await?;
         }
         sqlite_db::query("UPDATE oc_global_knowledge SET state=?,reviewed_at=? WHERE id=?")
             .bind(to)
@@ -242,70 +280,42 @@ impl SqliteTx {
             .execute(&mut *self.tx)
             .await
             .map_err(sqlite_err)?;
-        sqlite_db::query("UPDATE oc_global_knowledge_chunks SET enabled=? WHERE publication_id=?")
-            .bind(to == "approved")
-            .bind(id)
-            .execute(&mut *self.tx)
-            .await
-            .map_err(sqlite_err)?;
         Ok(release_value(&self.global_header(id).await?, true))
     }
+}
 
-    /// All normalized query terms must match one released chunk. Every lookup
-    /// and the final authorization share this read transaction.
-    pub(crate) async fn global_keyword_hits(
-        &mut self,
-        terms: &str,
-        limit: usize,
-    ) -> StorageResult<Vec<SearchHit>> {
-        let tokens: std::collections::BTreeSet<_> = terms.split_whitespace().collect();
-        if tokens.is_empty() {
-            return Ok(Vec::new());
-        }
-        // Group predicates so long valid queries stay below SQLite's
-        // expression-depth limit. The SQL contains only fixed fragments.
-        let predicates = (0..tokens.len())
-            .step_by(32)
-            .map(|start| {
-                let count = (tokens.len() - start).min(32);
-                format!("({})", vec!["instr(terms,?)>0"; count].join(" AND "))
-            })
-            .collect::<Vec<_>>()
-            .join(" AND ");
-        let sql = format!(
-            "SELECT publication_id,id,byte_start,byte_end,content FROM oc_global_knowledge_chunks WHERE enabled AND {predicates} ORDER BY publication_id,byte_start LIMIT ?"
-        );
-        let mut query = sqlite_db::query_as(&sql);
-        for token in tokens {
-            query = query.bind(format!(" {token} "));
-        }
-        let rows: Vec<(Uuid, Uuid, i64, i64, String)> = query
-            .bind(limit as i64)
-            .fetch_all(&mut *self.tx)
+#[cfg(feature = "local-storage")]
+impl SqliteStore {
+    pub(crate) async fn has_global_knowledge(&self) -> StorageResult<bool> {
+        sqlite_db::query_scalar("SELECT EXISTS(SELECT 1 FROM oc_global_knowledge)")
+            .fetch_one(&self.pool)
             .await
-            .map_err(sqlite_err)?;
-        let mut hits = Vec::with_capacity(rows.len());
-        for (publication, chunk, start, end, content) in rows {
-            let row = self.global_header(publication).await?;
-            if row.state != "approved" {
-                return Err(invalid_copy());
-            }
-            hits.push(SearchHit {
-                content_hash: hash(&content),
-                asset_id: publication,
-                version: row.version,
-                chunk_id: chunk,
-                kind: "knowledge".into(),
-                title: row.title,
-                content,
-                locator: json!({"scope":"global","publication_id":publication,"byte_start":start,
-                    "byte_end":end,"parser":"global-knowledge-snapshot:v1"}),
-                source_event_id: publication,
-                score: 1.0 / (61 + hits.len()) as f64,
-                identity: None,
-            });
+            .map_err(sqlite_err)
+    }
+}
+
+impl SqliteTx {
+    pub(super) async fn global_citation_available(
+        &mut self,
+        publication: Uuid,
+        version: i32,
+        chunk_id: Uuid,
+        start: i64,
+        end: i64,
+    ) -> StorageResult<bool> {
+        let manifest: Option<String> = sqlite_db::query_scalar(
+            "SELECT chunk_manifest FROM oc_global_knowledge WHERE id=? AND version=? AND state='approved'",
+        ).bind(publication).bind(version).fetch_optional(&mut *self.tx).await.map_err(sqlite_err)?;
+        let Some(manifest) = manifest else {
+            return Ok(false);
+        };
+        if !decode_chunks(&manifest)?
+            .iter()
+            .any(|chunk| chunk.id == chunk_id && chunk.start == start && chunk.end == end)
+        {
+            return Err(invalid_copy());
         }
-        Ok(hits)
+        Ok(true)
     }
 }
 

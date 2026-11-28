@@ -58,6 +58,7 @@ Source event/原始 Blob、内容条目及其版本、chunk、summary、图对�
 | --- | --- | --- |
 | SQLite | 权限、来源、版本与发布账本、持久任务、版本化长期事实、会话序号分配与请求幂等、Run/反馈实际引用的证据、Skill 记录和包 | `context.db` |
 | AnySeek 共享集合 | 已发布的分块正文、摘要及全文、向量和一跳图索引 | 按租户与 workspace 路由 |
+| AnySeek 全局集合 | 全局发布的固定版本、分块和关键词索引 | 保留给全局发布的独立作用域 |
 | AnySeek 私有集合 | 完整原始问答、轮次顺序、来源引用和哈希，以及关键词和向量投影 | 按租户、workspace 和逻辑 key 路由 |
 | BlobStore | 上传原件的字节 | 以 scope/hash 定位的本地目录 |
 
